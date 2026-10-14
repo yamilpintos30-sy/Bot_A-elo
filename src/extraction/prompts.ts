@@ -41,8 +41,13 @@ CRITERIOS
 - Si el mismo DNI o la misma patente aparece más de una vez, generá un solo PDF (el de vencimiento más lejano) y explicalo en "descartados".
 - Nunca inventes ni completes datos. Si un dato no se lee con seguridad, poné null o descartá el carnet explicando por qué.
 
+CÓMO TRABAJAR
+- Usá pocos pasos: entendé la disposición y resolvé todo el PDF con un solo script, no carnet por carnet.
+- Si el PDF tiene texto, preferí ubicar cada carnet y leer sus datos con el texto y sus coordenadas. Mirá imágenes solo cuando haga falta para entender la disposición o leer algo que no está como texto.
+- No vuelvas a abrir los PDF generados para controlarlos: hay una verificación independiente después.
+
 SALIDA
-Guardá los PDF y el manifest.json en el directorio de salida del contenedor: usá la variable de entorno OUTPUT_DIR si existe y, si no, /tmp/outputs. Antes de terminar, abrí cada PDF generado y confirmá que contiene un solo carnet completo y legible. Al final respondé con una línea: cuántos carnets generaste y cuántos descartaste.`;
+Guardá los PDF y el manifest.json en el directorio de salida del contenedor: usá la variable de entorno OUTPUT_DIR si existe y, si no, /tmp/outputs. Al final respondé con una línea: cuántos carnets generaste y cuántos descartaste.`;
 
 export const VERIFICACION_PROMPT = `Cada documento de arriba debería ser UNA credencial de ingreso recortada (carnet de una persona o de un vehículo). Leelos de forma independiente y, para cada uno, informá:
 - indice: el número de documento indicado arriba.

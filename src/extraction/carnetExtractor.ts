@@ -63,7 +63,7 @@ export class CarnetExtractor {
           content: [
             { type: "document", source: { type: "file", file_id: uploaded.id } },
             { type: "container_upload", file_id: uploaded.id },
-            { type: "text", text: EXTRACCION_PROMPT },
+            { type: "text", text: "Procesá este PDF de carnets siguiendo las instrucciones." },
           ],
         },
       ];
@@ -78,6 +78,12 @@ export class CarnetExtractor {
             thinking: { type: "adaptive" },
             output_config: { effort: this.opts.effort },
             tools: [{ type: "code_execution_20260521", name: "code_execution" }],
+            // Costo: el sandbox trabaja en varios pasos y en cada uno relee todo
+            // el contexto (PDF incluido). Las instrucciones fijas van en `system`
+            // con su propio punto de caché (iguales para todos los PDF) y el
+            // caché automático cubre lo que crece en cada paso.
+            system: [{ type: "text", text: EXTRACCION_PROMPT, cache_control: { type: "ephemeral" } }],
+            cache_control: { type: "ephemeral" },
             messages,
             ...(containerId ? { container: containerId } : {}),
           },
