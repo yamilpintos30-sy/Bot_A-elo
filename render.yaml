@@ -30,8 +30,10 @@ services:
         value: https://app.chatwoot.com
       - key: CHATWOOT_ACCOUNT_ID
         value: "182533"
+      # Inbox de ESTE bot: se carga en Environment de Render (146313, el +54 9
+      # 291 571-9564). NUNCA el de Enri (134690). Si falta, el bot no arranca.
       - key: CHATWOOT_INBOX_ID
-        value: "146313" # +54 9 291 571-9564. NUNCA el de Enri (134690).
+        sync: false
       - key: CHATWOOT_API_TOKEN
         sync: false
       - key: WEBHOOK_SECRET
