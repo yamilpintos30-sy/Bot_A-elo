@@ -35,7 +35,8 @@ export interface ButtonSpec {
 
 /** Lo que el bot quiere enviar, en orden. El canal lo traduce a Chatwoot. */
 export type Outbound =
-  | { kind: "text"; text: string }
+  /** `sinPie`: no agregar [Menú] [Eso es todo] (p. ej. la despedida). */
+  | { kind: "text"; text: string; sinPie?: boolean }
   | { kind: "buttons"; text: string; buttons: ButtonSpec[] }
   | { kind: "file"; filename: string; data: Buffer; caption?: string }
   /** Imagen de bienvenida (avatar del bot) con epígrafe. Sin imagen configurada, sale como texto. */

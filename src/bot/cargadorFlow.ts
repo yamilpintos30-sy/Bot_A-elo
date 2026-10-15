@@ -18,14 +18,12 @@ import type { Cliente } from "../storage/catalogo.js";
 import type { CarnetRegistrado } from "../storage/registro.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto, resolverCliente, resolverPlanta } from "./catalogo.js";
+import { BOTON_FIN } from "./comandos.js";
 import type { BotDeps, Emit, LotePendiente } from "./deps.js";
 import { avisoTipoMezclado, CARGA, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
-const MENU: ButtonSpec[] = [
-  { title: "👤 Choferes", payload: "tipo:chofer" },
-  { title: "🚛 Dominios", payload: "tipo:dominio" },
-];
+const MENU: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
 const CONFIRMAR: ButtonSpec = { title: "Confirmar carga", payload: "confirmar" };
 const CANCELAR: ButtonSpec = { title: "Cancelar", payload: "cancelar" };
 
@@ -62,6 +60,12 @@ export class CargadorFlow {
     const st: CargadorState = (session.cargador ??= { etapa: "esperando_datos" });
 
     if (st.etapa === "esperando_confirmacion") return this.enConfirmacion(session, st, payload, emit);
+
+    // [Menú 😊]: vuelve a elegir qué cargar.
+    if (payload === "menu") {
+      session.cargador = { etapa: "esperando_datos" };
+      return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
+    }
 
     // Adjuntos.
     const pdfs = msg.attachments.filter(esPdfAdjunto);

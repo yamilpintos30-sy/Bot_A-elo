@@ -16,17 +16,12 @@ import type { CarnetRegistrado } from "../storage/registro.js";
 import { todayInTimeZone } from "../utils/dates.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto, resolver } from "./catalogo.js";
+import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
 import type { BotDeps, Emit } from "./deps.js";
 import { CONSULTA, respuestaConsulta, type LineaPlanta } from "./texts.js";
 import type { ButtonSpec, CarnetConsultado, ConsultaState, IncomingMessage, Session } from "./types.js";
 
-const MENU: ButtonSpec[] = [
-  { title: "👤 Chofer", payload: "q:chofer" },
-  { title: "🚛 Vehículo", payload: "q:dominio" },
-];
-const NO_GRACIAS: ButtonSpec = { title: "No, gracias", payload: "nocarnet" };
-const OTRA: ButtonSpec = { title: "Otra consulta", payload: "otra" };
-const ES_TODO: ButtonSpec = { title: "Eso es todo", payload: "fin" };
+const MENU: ButtonSpec[] = [{ title: "👤 Chofer", payload: "q:chofer" }, { title: "🚛 Vehículo", payload: "q:dominio" }, BOTON_FIN];
 
 /** "chofer", "dni", "vehiculo", "patente", "dominio" escritos en vez de tocar el botón. */
 function opcionEscrita(texto: string): TipoRegistro | undefined {
@@ -60,11 +55,9 @@ export class ConsultaFlow {
 
     // Botones.
     if (payload?.startsWith("carnet:")) return this.enviarCarnet(st, Number(payload.slice(7)), emit);
-    if (payload === "nocarnet") return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: [OTRA, ES_TODO] });
-    if (payload === "otra") return this.menu(emit);
-    if (payload === "fin") {
-      session.consulta = { saludado: false };
-      return emit({ kind: "text", text: CONSULTA.despedida });
+    if (payload === "menu") {
+      st.esperando = undefined;
+      return this.menu(emit);
     }
     const opcion = payload?.startsWith("q:") ? (payload.slice(2) as TipoRegistro) : opcionEscrita(msg.text);
     if (opcion) {
@@ -175,15 +168,16 @@ export class ConsultaFlow {
     const texto = respuestaConsulta({ tipo, identificador, nombre, plantas, sinCredencialEn, documentacion, hoy });
     st.ultimos = carnets;
 
-    if (carnets.length === 0) return emit({ kind: "buttons", text: `${texto}\n\n${CONSULTA.algoMas}`, buttons: [OTRA, ES_TODO] });
-    await emit({ kind: "text", text: texto });
+    // Sin carnet para ofrecer: la respuesta cierra con [Menú] [Eso es todo] (pie automático).
+    if (carnets.length === 0) return emit({ kind: "text", text: `${texto}\n\n${CONSULTA.algoMas}` });
+    await emit({ kind: "text", text: texto, sinPie: true });
     if (carnets.length === 1) {
-      return emit({ kind: "buttons", text: CONSULTA.preguntaCarnet, buttons: [{ title: "📄 Sí, pasámelo", payload: "carnet:0" }, NO_GRACIAS] });
+      return emit({ kind: "buttons", text: CONSULTA.preguntaCarnet, buttons: [{ title: "📄 Sí, pasámelo", payload: "carnet:0" }, BOTON_MENU, BOTON_FIN] });
     }
     // Varias plantas: un botón por carnet (hasta 2 + "No, gracias"); si hay más, que escriba cuál.
     const botones = carnets.slice(0, 2).map((c, i) => ({ title: buttonTitle(this.tituloCarnet(c, clientes)), payload: `carnet:${i}` }));
     const pregunta = carnets.length > 2 ? `${CONSULTA.elegirCarnet}\nTambién podés escribir el cliente y la planta.` : CONSULTA.elegirCarnet;
-    return emit({ kind: "buttons", text: pregunta, buttons: [...botones, NO_GRACIAS] });
+    return emit({ kind: "buttons", text: pregunta, buttons: [...botones, BOTON_FIN] });
   }
 
   private tituloCarnet(c: CarnetConsultado, clientes: Cliente[]): string {
@@ -204,6 +198,6 @@ export class ConsultaFlow {
       this.deps.logger.error({ err }, "No se pudo traer el PDF del carnet");
       await emit({ kind: "text", text: CONSULTA.carnetNoDisponible });
     }
-    return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: [OTRA, ES_TODO] });
+    return emit({ kind: "text", text: CONSULTA.algoMas });
   }
 }

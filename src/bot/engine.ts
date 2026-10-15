@@ -5,12 +5,17 @@
  *     un .txt nuevo, rige desde el mensaje siguiente.
  *   - Los botones de WhatsApp vuelven como texto con su TÍTULO: se traducen a
  *     su payload con los botones del último mensaje de la sesión.
+ *   - Como en Enri: toda respuesta cierra con [Menú 😊] [Eso es todo, gracias];
+ *     "Eso es todo" despide y cierra; un "gracias" suelto después del cierre no
+ *     reabre la conversación.
  *   - Si una persona tomó la conversación (handoff), el bot no responde.
  */
 import { normalizeText } from "../utils/text.js";
 import { CargadorFlow } from "./cargadorFlow.js";
+import { detectarComando, esSoloCortesia, PIE } from "./comandos.js";
 import { ConsultaFlow } from "./consultaFlow.js";
 import type { BotDeps } from "./deps.js";
+import { DESPEDIDA } from "./texts.js";
 import type { IncomingMessage, Outbound, Session } from "./types.js";
 
 /** Canal de salida (Chatwoot en producción; un array en los tests). */
@@ -20,10 +25,19 @@ export interface Channel {
 
 /** Inactividad tras la cual la conversación arranca de cero. */
 const SESSION_TTL_MS = 60 * 60_000;
+/** Durante cuánto tiempo tras el cierre un "gracias" suelto no reabre la conversación. */
+const CORTESIA_TRAS_CIERRE_MS = 2 * 60 * 60_000;
+/**
+ * Un texto se retiene este tiempo por si es el ÚLTIMO de la respuesta (entonces
+ * sale con los botones de pie, en el mismo mensaje). Si llega otro mensaje o
+ * pasa el plazo (p. ej. "Recibí el PDF" antes de 2 minutos de proceso), sale solo.
+ */
+const RETENCION_MS = 1500;
 
 export class BotEngine {
   private readonly cargador: CargadorFlow;
   private readonly consulta: ConsultaFlow;
+  private readonly cerradas = new Map<string, number>();
 
   constructor(
     private readonly deps: BotDeps,
@@ -37,7 +51,20 @@ export class BotEngine {
   async handle(msg: IncomingMessage): Promise<void> {
     const { deps } = this;
     const now = deps.now();
-    const session = await this.loadSession(msg, now);
+    const saved = await deps.sessions.get(msg.conversationId).catch((err) => {
+      deps.logger.error({ err }, "No se pudo leer la sesión; se arranca una nueva");
+      return null;
+    });
+
+    // "Gracias" / "ok" / 👍 en respuesta a la despedida: silencio (como Enri).
+    const cerrada = this.cerradas.get(msg.conversationId);
+    if (!saved && cerrada !== undefined && now.getTime() - cerrada <= CORTESIA_TRAS_CIERRE_MS && msg.attachments.length === 0 && esSoloCortesia(msg.text)) {
+      deps.logger.info({ conversationId: msg.conversationId }, "Cortesía tras el cierre: no se reabre la conversación");
+      return;
+    }
+    this.cerradas.delete(msg.conversationId);
+
+    const session = this.prepararSesion(saved, msg, now);
     if (session.handedOffUntil && new Date(session.handedOffUntil) > now) {
       deps.logger.info({ conversationId: msg.conversationId }, "Conversación atendida por una persona: el bot no responde");
       return;
@@ -49,24 +76,82 @@ export class BotEngine {
     });
     session.rol = esCargador ? "cargador" : "consulta";
 
-    const payload = this.payloadDeBoton(session, msg.text);
+    const payload = this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined);
     session.botones = [];
     void deps.log.log({ conversationId: msg.conversationId, phone: session.phone, direction: "in", rol: session.rol, content: msg.text, meta: { attachments: msg.attachments.length, payload } });
 
-    const emit = async (out: Outbound) => {
+    const salida = this.salida(msg.conversationId, session);
+    try {
+      if (payload === "fin") return await this.cerrar(session, salida.emit);
+      if (session.rol === "cargador") await this.cargador.handle(session, msg, payload, salida.emit);
+      else await this.consulta.handle(session, msg, payload, salida.emit);
+    } finally {
+      await salida.terminar();
+      if (this.cerradas.has(msg.conversationId)) {
+        await deps.sessions.delete(msg.conversationId).catch((err) => deps.logger.error({ err }, "No se pudo borrar la sesión"));
+      } else {
+        session.updatedAt = deps.now().toISOString();
+        await deps.sessions.save(session).catch((err) => deps.logger.error({ err }, "No se pudo guardar la sesión"));
+      }
+    }
+  }
+
+  /** "Eso es todo, gracias": despedida y conversación cerrada (la próxima arranca de cero). */
+  private async cerrar(session: Session, emit: (o: Outbound) => Promise<void>): Promise<void> {
+    let texto = session.rol === "cargador" ? DESPEDIDA.cargador : DESPEDIDA.consulta;
+    if (session.cargador?.loteId) {
+      this.deps.lotes.borrar(session.cargador.loteId);
+      texto = DESPEDIDA.cargaCancelada;
+    }
+    this.cerradas.set(session.conversationId, this.deps.now().getTime());
+    await emit({ kind: "text", text: texto, sinPie: true });
+  }
+
+  /**
+   * Salida con botones de pie: el último texto de la respuesta se manda junto
+   * con [Menú 😊] [Eso es todo, gracias], en el mismo mensaje.
+   */
+  private salida(conversationId: string, session: Session) {
+    let retenido: Extract<Outbound, { kind: "text" }> | null = null;
+    let timer: NodeJS.Timeout | null = null;
+    let cadena = Promise.resolve();
+
+    const enviar = (out: Outbound) => {
       if (out.kind === "buttons") session.botones = out.buttons;
-      await this.channel.send(msg.conversationId, out);
-      const content = out.kind === "file" ? `[archivo] ${out.filename}` : out.kind === "image" ? `[imagen] ${out.caption}` : out.text;
-      void deps.log.log({ conversationId: msg.conversationId, phone: session.phone, direction: "out", rol: session.rol, content });
+      cadena = cadena.then(async () => {
+        await this.channel.send(conversationId, out);
+        const content = out.kind === "file" ? `[archivo] ${out.filename}` : out.kind === "image" ? `[imagen] ${out.caption}` : out.text;
+        void this.deps.log.log({ conversationId, phone: session.phone, direction: "out", rol: session.rol, content });
+      });
+      return cadena;
+    };
+    const soltar = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      const r = retenido;
+      retenido = null;
+      return r ? enviar(r) : cadena;
     };
 
-    try {
-      if (session.rol === "cargador") await this.cargador.handle(session, msg, payload, emit);
-      else await this.consulta.handle(session, msg, payload, emit);
-    } finally {
-      session.updatedAt = deps.now().toISOString();
-      await deps.sessions.save(session).catch((err) => deps.logger.error({ err }, "No se pudo guardar la sesión"));
-    }
+    return {
+      emit: async (out: Outbound) => {
+        await soltar();
+        if (out.kind === "text" && !out.sinPie) {
+          retenido = out;
+          timer = setTimeout(() => void soltar().catch(() => undefined), RETENCION_MS);
+          return;
+        }
+        await enviar(out);
+      },
+      terminar: async () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        const r = retenido;
+        retenido = null;
+        if (r) await enviar({ kind: "buttons", text: r.text, buttons: PIE });
+        await cadena;
+      },
+    };
   }
 
   /** Una persona respondió desde Chatwoot o desde el celular: el bot se calla un rato. */
@@ -82,16 +167,11 @@ export class BotEngine {
     await this.deps.sessions.delete(conversationId);
   }
 
-  private async loadSession(msg: IncomingMessage, now: Date): Promise<Session> {
-    const saved = await this.deps.sessions.get(msg.conversationId).catch((err) => {
-      this.deps.logger.error({ err }, "No se pudo leer la sesión; se arranca una nueva");
-      return null;
-    });
+  private prepararSesion(saved: Session | null, msg: IncomingMessage, now: Date): Session {
     const fresh = this.newSession(msg.conversationId, msg.phone ?? null);
     if (!saved) return fresh;
-    const vieja = now.getTime() - new Date(saved.updatedAt).getTime() > SESSION_TTL_MS;
     // Sesión vieja: se conserva sólo el handoff vigente.
-    if (vieja) return { ...fresh, handedOffUntil: saved.handedOffUntil };
+    if (now.getTime() - new Date(saved.updatedAt).getTime() > SESSION_TTL_MS) return { ...fresh, handedOffUntil: saved.handedOffUntil };
     return { ...saved, phone: saved.phone ?? msg.phone ?? null };
   }
 
@@ -102,6 +182,6 @@ export class BotEngine {
   private payloadDeBoton(session: Session, text: string): string | undefined {
     const t = normalizeText(text);
     if (!t) return undefined;
-    return session.botones.find((b) => normalizeText(b.title) === t || b.payload === text.trim())?.payload;
+    return [...session.botones, ...PIE].find((b) => normalizeText(b.title) === t || b.payload === text.trim())?.payload;
   }
 }

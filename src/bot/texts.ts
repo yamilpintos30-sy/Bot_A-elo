@@ -44,6 +44,14 @@ export function vigente(valor: string | null | undefined, hoy: CalendarDate): bo
   return d !== null && diffDays(hoy, d) >= 0;
 }
 
+// --- Cierre ("Eso es todo, gracias") ------------------------------------------------
+
+export const DESPEDIDA = {
+  consulta: "¡Gracias por comunicarte con SEA WHITE! Cuando necesites consultar un vencimiento, escribime. Saludos.",
+  cargador: "Listo. Cuando tengas otra carga, escribime.",
+  cargaCancelada: "Listo. La carga pendiente se canceló: no se cargó nada. Cuando tengas otra carga, escribime.",
+};
+
 // --- Cargadores ------------------------------------------------------------------
 
 /** "choferes" / "dominios" y su emoji, para los textos del cargador. */
@@ -147,7 +155,6 @@ export const CONSULTA = {
   preguntaCarnet: "¿Querés que te pase el carnet?",
   elegirCarnet: "¿De qué planta querés el carnet?",
   algoMas: "¿Necesitás algo más?",
-  despedida: "👍 Gracias por comunicarte con SEA WHITE. Cuando necesites, escribime.",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
 };
 

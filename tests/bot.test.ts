@@ -149,7 +149,7 @@ describe("cargador", () => {
 
     let outs = await say(CARGADOR, "hola, qué tal");
     expect(texts(outs)).toBe("¿Qué documentación vas a cargar?");
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
 
     outs = await say(CARGADOR, "👤 Choferes");
     expect(texts(outs)).toMatch(/Carga de \*choferes\*.*Indicá \*cliente y subcliente\*/s);
@@ -176,7 +176,7 @@ describe("cargador", () => {
     ]);
     expect(texts(outs)).toMatch(/Guardando 2 carnets en el sistema/);
     expect(texts(outs)).toMatch(/Carga completada.*2 cargados \(2 nuevos\)/s);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]); // listo para otra carga
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]); // listo para otra carga
     expect(registro.carnets.map((c) => [c.identificador, c.seawhiteId])).toEqual([
       ["33615617", 1],
       ["29642599", 2],
@@ -243,7 +243,7 @@ describe("cargador", () => {
     await say(CARGADOR, "Total planta 1", [pdfAdj()]);
     const outs = await say(CARGADOR, "Cancelar");
     expect(texts(outs)).toMatch(/cancelada/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
     expect(seawhite.cargas).toHaveLength(0);
   });
 
@@ -268,7 +268,7 @@ describe("cargador", () => {
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "total p1", [pdfAdj()]);
     expect(texts(outs)).toMatch(/ningún carnet apto.*Carnet ilegible/s);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 
   it("si falla el procesamiento lo informa y vuelve al menú", async () => {
@@ -276,14 +276,14 @@ describe("cargador", () => {
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "total p1", [pdfAdj()]);
     expect(texts(outs)).toMatch(/No pude procesar el PDF: timeout de Claude/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 
   it("los cargadores no consultan: un DNI les abre el menú de carga", async () => {
     const { say } = setup();
     const outs = await say(CARGADOR, "33615617");
     expect(texts(outs)).not.toMatch(/habilitado/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 });
 
@@ -293,7 +293,7 @@ describe("chofer", () => {
     const outs = await say(CHOFER, "hola");
     expect(outs[0]).toEqual({ kind: "image", caption: expect.stringMatching(/¡Hola! Soy \*Javier\*/) });
     expect(texts(outs)).toMatch(/Qué documentación querés consultar/);
-    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo"]);
+    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"]);
   });
 
   it("Chofer -> DNI -> vencimientos -> ¿te paso el carnet? -> su carnet con el ID de la consulta", async () => {
@@ -311,13 +311,13 @@ describe("chofer", () => {
     expect(t).toMatch(/Licencia: ✅ 10\/03\/2027/);
     expect(t).toMatch(/ART: ❌ venció el 01\/10\/2026/);
     expect(t).toMatch(/Querés que te pase el carnet/);
-    expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "No, gracias"]);
+    expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "Menú 😊", "Eso es todo, gracias"]);
 
     outs = await say(CHOFER, "📄 Sí, pasámelo");
     const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
     expect(file.filename).toBe("33615617.pdf");
     expect(file.data.toString()).toContain("33615617"); // SU carnet
-    expect(buttons(outs)).toEqual(["Otra consulta", "Eso es todo"]);
+    expect(buttons(outs)).toEqual(["Menú 😊", "Eso es todo, gracias"]);
 
     outs = await say(CHOFER, "Eso es todo");
     expect(texts(outs)).toMatch(/Gracias por comunicarte/);
@@ -353,7 +353,7 @@ describe("chofer", () => {
     const outs = await say(CHOFER, "33615617");
     expect(texts(outs)).toMatch(/Planta 1: .*habilitado/);
     expect(texts(outs)).toMatch(/Planta 2: .*habilitado/);
-    expect(buttons(outs)).toEqual(["Total P1", "Total P2", "No, gracias"]);
+    expect(buttons(outs)).toEqual(["Total P1", "Total P2", "Eso es todo, gracias"]);
   });
 
   it("pregunta por una planta donde no tiene credencial", async () => {
@@ -371,13 +371,13 @@ describe("chofer", () => {
     expect(texts(outs)).toMatch(/El DNI tiene que tener 7 u 8 números/);
   });
 
-  it("DNI sin credenciales: lo dice, muestra la documentación y ofrece otra consulta", async () => {
+  it("DNI sin credenciales: lo dice, muestra la documentación y cierra con Menú y Eso es todo", async () => {
     const { say } = setup();
     await say(CHOFER, "hola");
     const outs = await say(CHOFER, "30123456");
     expect(texts(outs)).toMatch(/No encontré credenciales de ingreso/);
     expect(texts(outs)).toMatch(/Licencia/);
-    expect(buttons(outs)).toEqual(["Otra consulta", "Eso es todo"]);
+    expect(buttons(outs)).toEqual(["Menú 😊", "Eso es todo, gracias"]);
   });
 
   it("si manda un PDF se le avisa que el número es sólo para consultas", async () => {
@@ -385,8 +385,63 @@ describe("chofer", () => {
     await say(CHOFER, "hola");
     const outs = await say(CHOFER, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/no se reciben archivos: es solo para consultas/);
-    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo"]);
+    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"]);
     expect(procesar).not.toHaveBeenCalled();
+  });
+});
+
+describe("pie y cierre (como Enri)", () => {
+  it("toda respuesta de texto cierra con [Menú 😊] [Eso es todo, gracias] en el mismo mensaje", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    const outs = await say(CHOFER, "👤 Chofer");
+    expect(outs).toHaveLength(1);
+    expect(outs[0]).toMatchObject({ kind: "buttons", text: expect.stringMatching(/Pasame el \*DNI\*/), buttons: [{ title: "Menú 😊" }, { title: "Eso es todo, gracias" }] });
+  });
+
+  it("'Eso es todo, gracias' despide, cierra y la próxima vez arranca de cero", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    let outs = await say(CHOFER, "Eso es todo, gracias");
+    expect(texts(outs)).toMatch(/Gracias por comunicarte con SEA WHITE/);
+    expect(buttons(outs)).toEqual([]); // la despedida va sin botones
+
+    outs = await say(CHOFER, "gracias!"); // cortesía tras el cierre: silencio
+    expect(outs).toEqual([]);
+
+    outs = await say(CHOFER, "hola"); // nueva conversación: saludo otra vez
+    expect(outs[0]!.kind).toBe("image");
+  });
+
+  it("escrito también cierra ('chau', 'nada más')", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    expect(texts(await say(CHOFER, "nada más"))).toMatch(/Gracias por comunicarte/);
+  });
+
+  it("[Menú 😊] vuelve al menú en cualquier momento", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    await say(CHOFER, "👤 Chofer");
+    const outs = await say(CHOFER, "Menú 😊");
+    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"]);
+  });
+
+  it("el cargador que cierra con una carga sin confirmar la cancela", async () => {
+    const { say, seawhite } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
+    const outs = await say(CARGADOR, "Eso es todo, gracias");
+    expect(texts(outs)).toMatch(/carga pendiente se canceló: no se cargó nada/);
+    await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas).toHaveLength(0);
+  });
+
+  it("el cargador vuelve a elegir tipo con [Menú 😊]", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "Menú 😊");
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 });
 
