@@ -4,3 +4,4 @@ dist/
 *.log
 # Salidas de pruebas del extractor: contienen datos personales (DNI, fotos).
 salida-extraccion/
+datos-prueba/
