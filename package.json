@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "extraer": "tsx src/cli/extraer.ts"
+    "extraer": "tsx src/cli/extraer.ts",
+    "verificar": "tsx src/cli/verificarSeaWhite.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
