@@ -6,7 +6,7 @@
  * ║  Carga (POST): EXCEPCIÓN AUTORIZADA a la Regla Nº 1, con 4 candados:       ║
  * ║    1. Lista blanca por método + ruta (endpoints.ts).                       ║
  * ║    2. Interruptor general ANELO_CARGA_HABILITADA (apagado por defecto).    ║
- * ║    3. Modo prueba: sólo el cliente de prueba (999999) mientras esté activo.║
+ * ║    3. Modo prueba: sólo clientes de prueba (9999xx) mientras esté activo.  ║
  * ║    4. Cada registro se valida acá de nuevo antes de salir a la red.        ║
  * ║  La confirmación de la persona por WhatsApp la exige la capa del bot.      ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
@@ -24,8 +24,11 @@ import { SeaWhiteTokenManager } from "./tokenManager.js";
 import {
   cargaResponseSchema,
   consultaResponseSchema,
+  documentacionCamionSchema,
+  documentacionChoferSchema,
   SeaWhiteError,
   type Consulta,
+  type Documentacion,
   type RegistroCarga,
   type ResumenCarga,
   type TipoRegistro,
@@ -42,7 +45,8 @@ export interface AneloClientOptions {
   timeoutMs: number;
   cargaHabilitada: boolean;
   modoPrueba: boolean;
-  clientePrueba: string;
+  /** Prefijo de los códigos de cliente de prueba (ej. "9999"). */
+  prefijoPrueba: string;
   logger: Logger;
   fetchImpl?: typeof fetch;
 }
@@ -85,6 +89,27 @@ export class AneloClient {
     };
   }
 
+  /**
+   * Documentación general (licencia, ART y F.931 del chofer; seguro y VTV del
+   * camión). Mismas consultas de sólo lectura que usa Enri.
+   */
+  async documentacion(tipo: TipoRegistro, identificador: string): Promise<Documentacion> {
+    const path = tipo === "chofer" ? "/api/vencimientos/chofer" : "/api/vencimientos/camion";
+    const payload: Record<string, string> = tipo === "chofer" ? { Nro_Documento: identificador } : { Dominio: identificador };
+    const res = await this.request("POST", path, { json: { Servidor: this.opts.servidor, ...payload } });
+    const raw = await this.safeJson(res);
+    if (res.status === 404) return { found: false };
+    if (!res.ok) throw new SeaWhiteError(`SEA WHITE respondió HTTP ${res.status} a la consulta de documentación`, res.status);
+    if (tipo === "chofer") {
+      const b = documentacionChoferSchema.safeParse(raw);
+      if (!b.success || !b.data.ok) return { found: false };
+      return { found: true, tipo, nombre: b.data.Razon_Social?.trim() || null, licencia: b.data.Licencia_Vto ?? null, art: b.data.ART_Vto ?? null, f931: b.data.F931_Vto ?? null };
+    }
+    const b = documentacionCamionSchema.safeParse(raw);
+    if (!b.success || !b.data.ok) return { found: false };
+    return { found: true, tipo, seguro: b.data.Vto_Seguro ?? null, vtv: b.data.Vto_Vtv ?? null };
+  }
+
   /** PDF del carnet. Requiere el `id` que devuelve `consultar`. */
   async descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer> {
     const res = await this.request("GET", `/api/VencimientosAnelo/${tipo}/${this.opts.servidor}/${id}/pdf`);
@@ -124,10 +149,10 @@ export class AneloClient {
     }
     if (registros.length === 0) throw new SeaWhiteError("No hay registros para cargar.");
     if (this.opts.modoPrueba) {
-      const ajenos = registros.filter((r) => r.cliente !== this.opts.clientePrueba);
+      const ajenos = registros.filter((r) => !r.cliente.startsWith(this.opts.prefijoPrueba));
       if (ajenos.length > 0) {
         throw new SeaWhiteError(
-          `Modo prueba activo: sólo se puede cargar en el cliente de prueba ${this.opts.clientePrueba} (se intentó ${[...new Set(ajenos.map((r) => r.cliente))].join(", ")}).`,
+          `Modo prueba activo: sólo se puede cargar en clientes de prueba (${this.opts.prefijoPrueba}xx); se intentó ${[...new Set(ajenos.map((r) => r.cliente))].join(", ")}.`,
         );
       }
     }
@@ -207,7 +232,7 @@ export class AneloClient {
   private async request(
     method: HttpMethod,
     path: string,
-    opts: { query?: URLSearchParams; body?: () => FormData } = {},
+    opts: { query?: URLSearchParams; body?: () => FormData; json?: Record<string, string> } = {},
     retryOn401 = true,
   ): Promise<Response> {
     const { writes } = assertAllowedEndpoint(method, path);
@@ -216,12 +241,15 @@ export class AneloClient {
     }
     const token = await this.tokens.getToken();
     const url = `${this.opts.baseUrl}${path}${opts.query ? `?${opts.query.toString()}` : ""}`;
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (opts.json) headers["Content-Type"] = "application/json";
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);
     let res: Response;
     try {
       // El FormData se arma de nuevo en cada intento: un body ya enviado no se puede reusar.
-      res = await this.doFetch(url, { method, headers: { Authorization: `Bearer ${token}` }, body: opts.body?.(), signal: controller.signal });
+      const body = opts.json ? JSON.stringify(opts.json) : opts.body?.();
+      res = await this.doFetch(url, { method, headers, body, signal: controller.signal });
     } catch (err) {
       throw new SeaWhiteError(`No se pudo conectar con SEA WHITE (${method} ${path}): ${(err as Error).message}`);
     } finally {

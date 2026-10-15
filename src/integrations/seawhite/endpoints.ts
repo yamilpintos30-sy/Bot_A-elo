@@ -26,6 +26,10 @@ export const SEAWHITE_ALLOWED_ENDPOINTS: readonly AllowedEndpoint[] = [
   // Autenticación (sólo valida credenciales y devuelve un token).
   { method: "POST", path: "/api/autenticacion/validar", writes: false, description: "login (token JWT)" },
   { method: "GET", path: "/api/autenticacion/me", writes: false, description: "verificar token" },
+  // Documentación general del chofer/camión (las mismas consultas que usa Enri).
+  // Son POST porque la API recibe los filtros en el cuerpo, pero SÓLO CONSULTAN.
+  { method: "POST", path: "/api/vencimientos/chofer", writes: false, description: "licencia, ART y F.931 del chofer" },
+  { method: "POST", path: "/api/vencimientos/camion", writes: false, description: "seguro y VTV del camión" },
   // Consultas de Vencimientos Añelo.
   { method: "GET", path: "/api/VencimientosAnelo/chofer", writes: false, description: "consulta de chofer" },
   { method: "GET", path: "/api/VencimientosAnelo/dominio", writes: false, description: "consulta de dominio" },

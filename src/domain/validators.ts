@@ -50,6 +50,28 @@ export function normalizeDni(input: string): ValidationResult {
   return { ok: true, value: digits };
 }
 
+/**
+ * DNI escrito dentro de una frase ("puedo entrar? 33.615.617"). Devuelve los
+ * dígitos sólo si hay UN único número de 7 u 8 cifras (o un CUIT/CUIL válido).
+ * Ignora los códigos de 6 cifras (cliente/planta) y números más largos.
+ */
+export function findDniInText(input: string): string | undefined {
+  const cuits = new Set(
+    (input.match(/(?<!\d)\d{2}[\s.\-]?\d{8}[\s.\-]?\d(?!\d)/g) ?? []).map((m) => dniFromCuit(m.replace(/\D/g, ""))).filter(Boolean) as string[],
+  );
+  if (cuits.size === 1) return [...cuits][0];
+  const found = new Set((input.match(/(?<![\d.\-])\d{1,2}\.?\d{3}\.?\d{3}(?!\d|[.\-]\d)/g) ?? []).map((m) => m.replace(/\D/g, "")));
+  const dnis = [...found].filter((d) => d.length >= 7);
+  return dnis.length === 1 ? dnis[0] : undefined;
+}
+
+/** Patente dentro de una frase (AA123BB, ABC123, 1234ABC). Sólo si hay UNA. */
+export function findPatenteInText(input: string): string | undefined {
+  const pattern = /(?<![A-Z0-9])([A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2}|[A-Z]{3}[\s-]?\d{3}|\d{3,4}[\s-]?[A-Z]{3})(?![A-Z0-9])/g;
+  const found = new Set((input.toUpperCase().match(pattern) ?? []).map((m) => m.replace(/[\s-]/g, "")));
+  return found.size === 1 ? [...found][0] : undefined;
+}
+
 /** ¿El texto es un DNI (o el CUIT/CUIL que lo contiene) y nada más? */
 export function looksLikeDni(input: string): boolean {
   const cleaned = input.replace(/[\s.\-]/g, "").replace(/^(dni|cuit|cuil):?/i, "");

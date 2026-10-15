@@ -1,0 +1,76 @@
+# Blueprint de Render del bot Añelo (Javier). SERVICIO PROPIO: no es el de Enri.
+# En Render: New + -> Blueprint -> conectar el repo Bot_A-elo. Render pide
+# completar las variables marcadas con sync: false (los secretos NUNCA van acá).
+services:
+  - type: web
+    name: seawhite-bot-anelo
+    runtime: node
+    plan: starter
+    # SIEMPRE 1 instancia: los PDF pendientes de confirmar, el anti-eco y la
+    # cola por conversación viven en memoria.
+    numInstances: 1
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: BOT_NAME
+        value: Javier
+      - key: LOG_LEVEL
+        value: info
+      - key: TIMEZONE
+        value: America/Argentina/Buenos_Aires
+
+      # --- Chatwoot ---
+      - key: CHATWOOT_BASE_URL
+        value: https://app.chatwoot.com
+      - key: CHATWOOT_ACCOUNT_ID
+        value: "182533"
+      - key: CHATWOOT_INBOX_ID
+        value: "146313" # +54 9 291 571-9564. NUNCA el de Enri (134690).
+      - key: CHATWOOT_API_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        generateValue: true # propio, distinto del de Enri
+
+      # --- Claude ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: EXTRACTION_MODEL
+        value: claude-opus-5-5
+      - key: EXTRACTION_EFFORT
+        value: high
+
+      # --- SEA WHITE ---
+      - key: SEALINK_BASE_URL
+        value: https://api.seawhite.com.ar:9443
+      - key: SEALINK_EMAIL
+        sync: false
+      - key: SEALINK_PASSWORD
+        sync: false
+      - key: SEALINK_SERVIDOR
+        value: "1"
+      # Carga habilitada SOLO en modo prueba (clientes 9999xx). Para operar con
+      # clientes reales: ANELO_MODO_PRUEBA=false (decisión de Yamil).
+      - key: ANELO_CARGA_HABILITADA
+        value: "true"
+      - key: ANELO_MODO_PRUEBA
+        value: "true"
+      - key: ANELO_PREFIJO_PRUEBA
+        value: "9999"
+
+      # --- Supabase (proyecto PROPIO del bot Añelo) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # --- Ritmo ---
+      - key: DEBOUNCE_SECONDS
+        value: "3"
+      - key: HANDOFF_SILENCE_MINUTES
+        value: "120"

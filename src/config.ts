@@ -20,10 +20,17 @@ const booleanFromEnv = z
 // --- Secciones ---------------------------------------------------------------
 
 export const generalSchema = z.object({
-  BOT_NAME: z.string().default("Bot Añelo"),
+  /** Nombre con el que se presenta a los choferes (configurable sin tocar código). */
+  BOT_NAME: z.string().default("Javier"),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   TIMEZONE: z.string().default("America/Argentina/Buenos_Aires"),
+  /** Segundos que se esperan para juntar mensajes seguidos (texto + PDF). */
+  DEBOUNCE_SECONDS: z.coerce.number().min(0).default(3),
+  /** Minutos que el bot se calla en un chat después de que escribe una persona. */
+  HANDOFF_SILENCE_MINUTES: z.coerce.number().int().positive().default(120),
+  /** Estados de conversación de Chatwoot en los que el bot responde. */
+  BOT_ACTIVE_STATUSES: z.string().default("open,pending"),
 });
 
 export const claudeSchema = z.object({
@@ -49,12 +56,13 @@ export const seawhiteSchema = z.object({
    */
   ANELO_CARGA_HABILITADA: booleanFromEnv.default(false),
   /**
-   * Modo prueba: con true, la carga SOLO acepta el cliente de prueba (no hay
-   * ambiente de prueba en SEA WHITE; las pruebas quedan en producción bajo un
-   * cliente ficticio que nunca se confunde con uno real).
+   * Modo prueba: con true, la carga SOLO acepta clientes de prueba, cuyo
+   * código empieza con este prefijo (ej. 999991 Total, 999992 Vista). No hay
+   * ambiente de prueba en SEA WHITE: las pruebas quedan en producción bajo
+   * códigos ficticios que nunca se confunden con uno real.
    */
   ANELO_MODO_PRUEBA: booleanFromEnv.default(true),
-  ANELO_CLIENTE_PRUEBA: z.string().regex(/^\d{6}$/).default("999999"),
+  ANELO_PREFIJO_PRUEBA: z.string().regex(/^\d{1,6}$/).default("9999"),
 });
 
 export const chatwootSchema = z.object({

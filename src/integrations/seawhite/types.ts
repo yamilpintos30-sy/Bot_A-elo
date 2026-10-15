@@ -90,6 +90,28 @@ export type Consulta =
     }
   | { found: false; tipo: TipoRegistro; identificador: string; mensaje?: string };
 
+/** Respuesta de POST /api/vencimientos/chofer (consulta de documentación, igual que Enri). */
+export const documentacionChoferSchema = z.object({
+  ok: z.boolean(),
+  Razon_Social: z.string().nullable().optional(),
+  Licencia_Vto: z.string().nullable().optional(),
+  F931_Vto: z.string().nullable().optional(),
+  ART_Vto: z.string().nullable().optional(),
+});
+
+/** Respuesta de POST /api/vencimientos/camion. */
+export const documentacionCamionSchema = z.object({
+  ok: z.boolean(),
+  Vto_Seguro: z.string().nullable().optional(),
+  Vto_Vtv: z.string().nullable().optional(),
+});
+
+/** Documentación general (fechas tal como vienen de la API, o null). */
+export type Documentacion =
+  | { found: true; tipo: "chofer"; nombre: string | null; licencia: string | null; art: string | null; f931: string | null }
+  | { found: true; tipo: "dominio"; seguro: string | null; vtv: string | null }
+  | { found: false };
+
 /** Resultado normalizado de una carga (todos los lotes juntos). */
 export interface ResumenCarga {
   total: number;

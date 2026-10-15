@@ -41,7 +41,7 @@ function client(fetchImpl: typeof fetch, overrides: Partial<ConstructorParameter
     timeoutMs: 5000,
     cargaHabilitada: true,
     modoPrueba: true,
-    clientePrueba: "999999",
+    prefijoPrueba: "9999",
     logger,
     fetchImpl,
     ...overrides,
@@ -49,7 +49,7 @@ function client(fetchImpl: typeof fetch, overrides: Partial<ConstructorParameter
 }
 
 function registro(dni: string, extra: Partial<RegistroCarga> = {}): RegistroCarga {
-  return { cliente: "999999", subcliente: "999991", identificador: dni, vencimiento: "31-12-2027", pdf: PDF, ...extra };
+  return { cliente: "999991", subcliente: "000001", identificador: dni, vencimiento: "31-12-2027", pdf: PDF, ...extra };
 }
 
 const okCarga = (dnis: string[]) =>
@@ -67,11 +67,15 @@ describe("lista blanca de SEA WHITE", () => {
     expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/dominio/1/5/pdf").writes).toBe(false);
     expect(assertAllowedEndpoint("POST", "/api/VencimientosAnelo/chofer").writes).toBe(true);
     expect(assertAllowedEndpoint("POST", "/api/VencimientosAnelo/dominio").writes).toBe(true);
+    // Documentación general: POST, pero sólo consulta (igual que Enri).
+    expect(assertAllowedEndpoint("POST", "/api/vencimientos/chofer").writes).toBe(false);
+    expect(assertAllowedEndpoint("POST", "/api/vencimientos/camion").writes).toBe(false);
   });
 
   it("bloquea cualquier otra ruta o método", () => {
     expect(() => assertAllowedEndpoint("POST", "/api/VencimientosAnelo/chofer/1/8/pdf")).toThrow(/BLOQUEADO/);
-    expect(() => assertAllowedEndpoint("POST", "/api/vencimientos/chofer")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("POST", "/api/vencimientos/chofer/alta")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/vencimientos/chofer")).toThrow(/BLOQUEADO/);
     expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/chofer/1/8/pdf/../borrar")).toThrow(/BLOQUEADO/);
     expect(() => assertAllowedEndpoint("POST", "/api/VencimientosAnelo/borrar")).toThrow(/BLOQUEADO/);
   });
@@ -124,8 +128,8 @@ describe("candados de la carga", () => {
     expect(posts).toHaveLength(2);
     const first = posts[0]!.body as FormData;
     expect(first.get("Servidor")).toBe("1");
-    expect(first.get("Registros[0].Cliente")).toBe("999999");
-    expect(first.get("Registros[0].Subcliente")).toBe("999991");
+    expect(first.get("Registros[0].Cliente")).toBe("999991");
+    expect(first.get("Registros[0].Subcliente")).toBe("000001");
     expect(first.get("Registros[0].Chofer")).toBe("30000000");
     expect(first.get("Registros[0].Vencimiento")).toBe("31-12-2027");
     expect((first.get("Registros[0].Archivo") as File).name).toBe("30000000.pdf");

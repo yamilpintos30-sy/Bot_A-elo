@@ -55,11 +55,20 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 | Etapa | Estado |
 |---|---|
 | 1. Base: configuración, cliente de SEA WHITE con candados, tests | ✅ |
-| 2. Extractor de carnets y prueba local | ✅ código y tests · ⏳ prueba con los PDF reales (falta la API key) |
-| 3. Panel: contexto, análisis, cargadores, clientes y plantas, registro | ⏳ |
-| 4. WhatsApp: webhook, filtro de inbox, anti-eco, consultas y carnet | ⏳ |
-| 5. Flujo de carga con confirmación (primero en el cliente 999999) | ⏳ |
+| 2. Extractor de carnets | ✅ probado con los 4 PDF de ejemplo: 52 de 52 correctos, ~US$ 0,03 por carnet |
+| 4. WhatsApp: webhook, filtro de inbox, anti-eco, flujo del chofer (Javier) | ✅ código y tests · ⏳ prueba real |
+| 5. Flujo del cargador con botón Confirmar (modo prueba 9999xx) | ✅ código y tests · ⏳ prueba real |
+| 3. Panel: contexto, análisis, cargadores (.txt), clientes y plantas, registro | ⏳ |
 | 6. Barra de pestañas en el panel de Enri | ⏳ |
+
+## Cómo funciona por WhatsApp
+
+**Cargadores** (tabla `anelo_cargadores`): sin saludos. Mandan cliente, planta y PDF, en un mensaje o en varios ("Total planta 1" + PDF). Ven el resumen, tocan **Confirmar carga** y reciben el resultado. Después queda listo para el siguiente.
+
+**Choferes** (cualquier otro número): Javier saluda y pide el DNI o la patente.
+- Responde en qué plantas está habilitado y muestra licencia, ART y F.931 (o seguro y VTV).
+- Ofrece el carnet con un botón y manda **el carnet del DNI consultado**.
+- Si un chofer manda un archivo, se le avisa que el número es solo para consultas.
 
 ## Comandos
 
