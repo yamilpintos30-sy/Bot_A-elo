@@ -63,12 +63,19 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 
 ## Cómo funciona por WhatsApp
 
-**Cargadores** (tabla `anelo_cargadores`): sin saludos. Mandan cliente, planta y PDF, en un mensaje o en varios ("Total planta 1" + PDF). Ven el resumen, tocan **Confirmar carga** y reciben el resultado. Después queda listo para el siguiente.
+**Cargadores** (tabla `anelo_cargadores`):
+1. Cualquier mensaje abre el menú **[👤 Choferes] [🚛 Dominios]**.
+2. Piden cliente y subcliente, que se cotejan contra la tabla de clientes: "✅ encontrados, mandá el PDF".
+3. Mientras se procesa el PDF, el bot avisa el progreso: recibido, separando y verificando. Si tarda, manda "sigue en proceso".
+4. **Filtro de tipo:** si eligió choferes y el PDF trae vehículos (o al revés), avisa y no carga nada. Ofrece cargarlo como el otro tipo. Si el PDF viene mezclado, carga solo el tipo elegido y lista el resto.
+5. Resumen, **[Confirmar carga] [Cancelar]**, carga en SEA WHITE, resultado y vuelve al menú.
 
-**Choferes** (cualquier otro número): Javier saluda y pide el DNI o la patente.
-- Responde en qué plantas está habilitado y muestra licencia, ART y F.931 (o seguro y VTV).
-- Ofrece el carnet con un botón y manda **el carnet del DNI consultado**.
-- Si un chofer manda un archivo, se le avisa que el número es solo para consultas.
+**Choferes** (cualquier otro número):
+1. Saludo cordial con la imagen de Javier (`WELCOME_IMAGE`, por defecto `assets/javier.jpg`; sin imagen, sale solo texto).
+2. Menú **[👤 Chofer] [🚛 Vehículo]**: pide el DNI o la patente.
+3. Muestra los vencimientos: plantas habilitadas, más licencia, ART y F.931 (o seguro y VTV). De esa consulta guarda el **ID del carnet**.
+4. "¿Querés que te pase el carnet?" → con ese ID trae el PDF y lo manda.
+5. Si escribe el DNI o la patente directamente, responde sin pasar por el menú. Si manda un archivo, se le avisa que el número es solo para consultas.
 
 ## Comandos
 

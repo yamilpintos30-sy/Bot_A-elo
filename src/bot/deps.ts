@@ -2,7 +2,7 @@
  * Dependencias de los flujos del bot. Son interfaces para poder testear todo
  * con dobles (sin Claude, sin SEA WHITE, sin Chatwoot, sin Supabase).
  */
-import type { ProcesamientoResultado } from "../extraction/procesarCarnets.js";
+import type { EtapaProceso, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
 import type { Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { CargadoresRepo } from "../storage/cargadores.js";
 import type { CatalogoRepo } from "../storage/catalogo.js";
@@ -20,7 +20,7 @@ export interface SeaWhiteService {
 }
 
 export interface Procesador {
-  procesar(pdf: Buffer, filename: string): Promise<ProcesamientoResultado>;
+  procesar(pdf: Buffer, filename: string, onEtapa?: (etapa: EtapaProceso) => Promise<void> | void): Promise<ProcesamientoResultado>;
 }
 
 export interface BotDeps {
@@ -44,6 +44,8 @@ export type Emit = (out: Outbound) => Promise<void>;
 
 /** Lote procesado que espera el botón Confirmar. */
 export interface LotePendiente {
+  /** Tipo que eligió el cargador en el menú (chofer o dominio). */
+  tipo: TipoRegistro;
   cargaId: number | null;
   clienteCodigo: string;
   plantaCodigo: string;

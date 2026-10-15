@@ -1,4 +1,5 @@
 /** Armado de dependencias ("composition root"): todo lo real se instancia acá, una vez. */
+import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { LotesPendientes, type BotDeps } from "./bot/deps.js";
 import { BotEngine } from "./bot/engine.js";
@@ -65,6 +66,7 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     now: () => new Date(),
   };
 
-  const engine = new BotEngine(deps, new ChatwootChannel(chatwoot), config.HANDOFF_SILENCE_MINUTES);
+  const channel = new ChatwootChannel(chatwoot, logger, config.WELCOME_IMAGE ? path.resolve(process.cwd(), config.WELCOME_IMAGE) : undefined);
+  const engine = new BotEngine(deps, channel, config.HANDOFF_SILENCE_MINUTES);
   return { config, logger, supabase, seawhite, echo, engine, deps };
 }

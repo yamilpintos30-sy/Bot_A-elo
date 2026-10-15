@@ -1,11 +1,21 @@
 /** Traduce lo que el bot quiere enviar (Outbound) a llamadas de Chatwoot. */
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { Channel } from "../../bot/engine.js";
 import type { Outbound } from "../../bot/types.js";
+import type { Logger } from "../../utils/logger.js";
 import { splitForButtons, splitForWhatsApp } from "../../utils/text.js";
 import type { ChatwootClient } from "./client.js";
 
 export class ChatwootChannel implements Channel {
-  constructor(private readonly client: ChatwootClient) {}
+  /** undefined = todavía no se intentó leer; null = no hay imagen (saludo sólo texto). */
+  private welcomeImage: Buffer | null | undefined;
+
+  constructor(
+    private readonly client: ChatwootClient,
+    private readonly logger: Logger,
+    private readonly welcomeImagePath?: string,
+  ) {}
 
   async send(conversationId: string, out: Outbound): Promise<void> {
     switch (out.kind) {
@@ -23,6 +33,30 @@ export class ChatwootChannel implements Channel {
       case "file":
         await this.client.sendFile(conversationId, out.filename, out.data, out.caption);
         return;
+      case "image": {
+        const image = await this.loadWelcomeImage();
+        if (!image) {
+          await this.client.sendText(conversationId, out.caption);
+          return;
+        }
+        const id = await this.client.sendImage(conversationId, out.caption, image, path.basename(this.welcomeImagePath!));
+        // Que la imagen llegue antes que los botones que siguen.
+        const entregada = id ? await this.client.waitDelivered(conversationId, id) : false;
+        await new Promise((r) => setTimeout(r, entregada ? 600 : 3000));
+        return;
+      }
     }
+  }
+
+  private async loadWelcomeImage(): Promise<Buffer | null> {
+    if (this.welcomeImage !== undefined) return this.welcomeImage;
+    if (!this.welcomeImagePath) return (this.welcomeImage = null);
+    try {
+      this.welcomeImage = await readFile(this.welcomeImagePath);
+    } catch {
+      this.logger.warn({ path: this.welcomeImagePath }, "No hay imagen de bienvenida; el saludo sale sólo con texto");
+      this.welcomeImage = null;
+    }
+    return this.welcomeImage;
   }
 }

@@ -37,13 +37,17 @@ export interface ButtonSpec {
 export type Outbound =
   | { kind: "text"; text: string }
   | { kind: "buttons"; text: string; buttons: ButtonSpec[] }
-  | { kind: "file"; filename: string; data: Buffer; caption?: string };
+  | { kind: "file"; filename: string; data: Buffer; caption?: string }
+  /** Imagen de bienvenida (avatar del bot) con epígrafe. Sin imagen configurada, sale como texto. */
+  | { kind: "image"; caption: string };
 
 export type Rol = "cargador" | "consulta";
 
 /** Estado del flujo de carga (cargadores). */
 export interface CargadorState {
   etapa: "esperando_datos" | "esperando_confirmacion";
+  /** Qué eligió cargar en el menú: carnets de personas (chofer) o de vehículos (dominio). */
+  tipo?: "chofer" | "dominio";
   clienteCodigo?: string;
   plantaCodigo?: string;
   /** PDF recibido y todavía no procesado. */
@@ -65,6 +69,8 @@ export interface CarnetConsultado {
 /** Estado del flujo de consultas (choferes). */
 export interface ConsultaState {
   saludado: boolean;
+  /** Qué eligió consultar en el menú: espera un DNI (chofer) o una patente (dominio). */
+  esperando?: "chofer" | "dominio";
   /** Cliente/planta que mencionó antes de dar el DNI ("¿puedo entrar a shell planta 2?"). */
   clienteCodigo?: string;
   plantaCodigo?: string;

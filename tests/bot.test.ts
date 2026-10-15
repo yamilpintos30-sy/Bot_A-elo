@@ -79,11 +79,18 @@ function resultado(aceptados: CarnetListo[], rechazados: ProcesamientoResultado[
   return { aceptados, rechazados, formato: "test", notaModelo: "", manifest: { carnets: [], descartados: [] }, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0 }, costoUsd: 0.1, duracionMs: 1 };
 }
 
-function setup(opts: { procesar?: () => Promise<ProcesamientoResultado> } = {}) {
+type ProcesarFn = (pdf: Buffer, f: string, onEtapa?: (e: "separando" | "verificando") => Promise<void> | void) => Promise<ProcesamientoResultado>;
+
+function setup(opts: { procesar?: ProcesarFn } = {}) {
   const sent: Array<{ conversationId: string; out: Outbound }> = [];
   const seawhite = new FakeSeaWhite();
   const registro = new MemoryRegistro();
-  const procesar = vi.fn(opts.procesar ?? (async () => resultado([carnet("33615617", "18-10-2026"), carnet("29642599", "31-10-2026", { observaciones: "Inhabilitado para conducir" })])));
+  const porDefecto: ProcesarFn = async (_pdf, _f, onEtapa) => {
+    await onEtapa?.("separando");
+    await onEtapa?.("verificando");
+    return resultado([carnet("33615617", "18-10-2026"), carnet("29642599", "31-10-2026", { observaciones: "Inhabilitado para conducir" })]);
+  };
+  const procesar = vi.fn(opts.procesar ?? porDefecto);
   const deps: BotDeps = {
     botName: "Javier",
     timezone: "America/Argentina/Buenos_Aires",
@@ -111,7 +118,7 @@ function setup(opts: { procesar?: () => Promise<ProcesamientoResultado> } = {}) 
 }
 
 const pdfAdj = (name = "carnets.pdf"): IncomingAttachment => ({ url: `https://chatwoot/${name}`, fileType: "file", contentType: "application/pdf", fileName: name });
-const texts = (outs: Outbound[]) => outs.map((o) => (o.kind === "file" ? `[file ${o.filename}]` : o.text)).join("\n---\n");
+const texts = (outs: Outbound[]) => outs.map((o) => (o.kind === "file" ? `[file ${o.filename}]` : o.kind === "image" ? `[imagen] ${o.caption}` : o.text)).join("\n---\n");
 const buttons = (outs: Outbound[]) => outs.flatMap((o) => (o.kind === "buttons" ? o.buttons.map((b) => b.title) : []));
 
 describe("reconocimiento de cliente y planta", () => {
@@ -126,70 +133,123 @@ describe("reconocimiento de cliente y planta", () => {
   });
 });
 
+
+/** Carga completa por el flujo del cargador (para preparar datos de los tests de consulta). */
+async function cargar(say: Awaited<ReturnType<typeof setup>>["say"], tipo: "👤 Choferes" | "🚛 Dominios", destino: string) {
+  await say(CARGADOR, "hola");
+  await say(CARGADOR, tipo);
+  await say(CARGADOR, destino);
+  await say(CARGADOR, "", [pdfAdj()]);
+  return say(CARGADOR, "Confirmar carga");
+}
+
 describe("cargador", () => {
-  it("cliente + planta + PDF en un mensaje -> resumen -> Confirmar -> carga y registro", async () => {
+  it("menú -> cliente y subcliente cotejados -> PDF con avisos de progreso -> Confirmar -> carga", async () => {
     const { say, seawhite, registro } = setup();
-    let outs = await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/Procesando \*carnets\.pdf\* para \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
-    expect(texts(outs)).toMatch(/2 listos para cargar/);
-    expect(texts(outs)).toMatch(/Inhabilitado para conducir/);
-    expect(texts(outs)).not.toMatch(/hola|gracias/i); // sin cordialidades
+
+    let outs = await say(CARGADOR, "hola, qué tal");
+    expect(texts(outs)).toBe("¿Qué documentación vas a cargar?");
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+
+    outs = await say(CARGADOR, "👤 Choferes");
+    expect(texts(outs)).toMatch(/Carga de \*choferes\*.*Indicá \*cliente y subcliente\*/s);
+
+    outs = await say(CARGADOR, "Total planta 1");
+    expect(texts(outs)).toMatch(/✅ Cliente y subcliente encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(texts(outs)).toMatch(/Mandá el PDF con los carnets de personas/);
+
+    outs = await say(CARGADOR, "", [pdfAdj()]);
+    const t = texts(outs);
+    expect(t).toMatch(/Recibí \*carnets\.pdf\*\. Estoy separando los carnets/);
+    expect(t).toMatch(/Carnets separados\. Estoy verificando/);
+    expect(t).toMatch(/2 listos para cargar \(2 personas\)/);
+    expect(t).toMatch(/Inhabilitado para conducir/);
     expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
     expect(seawhite.cargas).toHaveLength(0); // nada se carga sin confirmar
 
     outs = await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas).toHaveLength(1);
+    expect(seawhite.cargas[0]!.tipo).toBe("chofer");
     expect(seawhite.cargas[0]!.registros.map((r) => [r.cliente, r.subcliente, r.identificador, r.vencimiento])).toEqual([
       ["999991", "000001", "33615617", "18-10-2026"],
       ["999991", "000001", "29642599", "31-10-2026"],
     ]);
-    expect(texts(outs)).toMatch(/Carga completada/);
-    expect(texts(outs)).toMatch(/2 cargados \(2 nuevos\)/);
-    expect(registro.carnets.map((c) => [c.identificador, c.seawhiteId, c.apellidoNombre])).toEqual([
-      ["33615617", 1, "PERSONA 33615617"],
-      ["29642599", 2, "PERSONA 29642599"],
+    expect(texts(outs)).toMatch(/Guardando 2 carnets en el sistema/);
+    expect(texts(outs)).toMatch(/Carga completada.*2 cargados \(2 nuevos\)/s);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]); // listo para otra carga
+    expect(registro.carnets.map((c) => [c.identificador, c.seawhiteId])).toEqual([
+      ["33615617", 1],
+      ["29642599", 2],
     ]);
-    expect(registro.cargas[0]).toMatchObject({ estado: "completada", correctos: 2 });
-
-    // Queda listo para el próximo PDF.
-    outs = await say(CARGADOR, "vista", [pdfAdj("otro.pdf")]);
-    expect(texts(outs)).toMatch(/VISTA ENERGY \(PRUEBA\) – Planta 1/); // planta única: no pregunta
   });
 
-  it("si falta cliente o planta los pide con botones", async () => {
+  it("todo en un mensaje (cliente + subcliente + PDF) después de elegir el tipo", async () => {
     const { say, procesar } = setup();
-    let outs = await say(CARGADOR, "", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/Para qué cliente/);
-    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
-    outs = await say(CARGADOR, "Total Austral");
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
-    outs = await say(CARGADOR, "Planta 2");
+    await say(CARGADOR, "Choferes");
+    const outs = await say(CARGADOR, "total p1", [pdfAdj()]);
+    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados/);
     expect(procesar).toHaveBeenCalledTimes(1);
-    expect(texts(outs)).toMatch(/Planta 2/);
+    expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
   });
 
-  it("planta inexistente: avisa y ofrece las plantas", async () => {
+  it("cliente inexistente: lo dice y muestra los disponibles", async () => {
     const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "Shell planta 2");
+    expect(texts(outs)).toMatch(/No encontré ese cliente.*Total Austral.*Vista Energy/s);
+  });
+
+  it("subcliente inexistente: lo dice y ofrece los del cliente", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "total planta 9");
-    expect(texts(outs)).toMatch(/No encontré esa planta/);
+    expect(texts(outs)).toMatch(/No encontré ese subcliente en Total Austral/);
     expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
   });
 
-  it("con cliente y planta pero sin PDF, pide el PDF", async () => {
-    const { say } = setup();
-    const outs = await say(CARGADOR, "total p1");
-    expect(texts(outs)).toMatch(/Mandá el PDF para \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+  it("FILTRO DE TIPO: eligió dominios y el PDF es de choferes -> avisa y no carga", async () => {
+    const { say, seawhite } = setup();
+    await say(CARGADOR, "🚛 Dominios");
+    await say(CARGADOR, "Total planta 1");
+    let outs = await say(CARGADOR, "", [pdfAdj()]);
+    expect(texts(outs)).toMatch(/Elegiste cargar \*dominios\*, pero el PDF tiene 2 carnets de personas/);
+    expect(buttons(outs)).toEqual(["Cargar choferes", "Cancelar"]);
+
+    outs = await say(CARGADOR, "Confirmar carga"); // no hay nada de dominio para confirmar
+    expect(seawhite.cargas).toHaveLength(0);
+
+    outs = await say(CARGADOR, "Cargar choferes");
+    expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
+    await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas[0]!.tipo).toBe("chofer");
   });
 
-  it("Cancelar no carga nada", async () => {
+  it("FILTRO DE TIPO: PDF mezclado -> carga sólo el tipo elegido y avisa el resto", async () => {
+    const { say, seawhite } = setup({
+      procesar: async () => resultado([carnet("33615617", "18-10-2026"), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null, pagina: 2 })]),
+    });
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1");
+    const outs = await say(CARGADOR, "", [pdfAdj()]);
+    expect(texts(outs)).toMatch(/también tiene 1 carnets de vehículos, que NO se van a cargar.*AF498ZJ/s);
+    expect(texts(outs)).toMatch(/1 listo para cargar \(1 persona\)/);
+    await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas.map((c) => [c.tipo, c.registros.map((r) => r.identificador)])).toEqual([["chofer", ["33615617"]]]);
+  });
+
+  it("Cancelar no carga nada y vuelve al menú", async () => {
     const { say, seawhite } = setup();
+    await say(CARGADOR, "👤 Choferes");
     await say(CARGADOR, "Total planta 1", [pdfAdj()]);
     const outs = await say(CARGADOR, "Cancelar");
     expect(texts(outs)).toMatch(/cancelada/);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
     expect(seawhite.cargas).toHaveLength(0);
   });
 
-  it("con una carga pendiente, un PDF nuevo no la pisa", async () => {
+  it("con una carga pendiente de confirmar no acepta otra", async () => {
     const { say, procesar } = setup();
+    await say(CARGADOR, "👤 Choferes");
     await say(CARGADOR, "Total planta 1", [pdfAdj()]);
     const outs = await say(CARGADOR, "vista", [pdfAdj("otro.pdf")]);
     expect(texts(outs)).toMatch(/carga pendiente de confirmar/);
@@ -198,103 +258,135 @@ describe("cargador", () => {
 
   it("rechaza adjuntos que no son PDF", async () => {
     const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "", [{ url: "https://chatwoot/foto.jpg", fileType: "image", contentType: "image/jpeg" }]);
     expect(texts(outs)).toMatch(/Solo se aceptan archivos PDF/);
   });
 
-  it("si no queda ningún carnet apto, no pide confirmación", async () => {
+  it("si no queda ningún carnet apto lo informa y vuelve al menú", async () => {
     const { say } = setup({ procesar: async () => resultado([], [{ pagina: 1, referencia: "—", motivo: "Carnet ilegible" }]) });
+    await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "total p1", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/ningún carnet apto/);
-    expect(buttons(outs)).toEqual([]);
+    expect(texts(outs)).toMatch(/ningún carnet apto.*Carnet ilegible/s);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
   });
 
-  it("si falla el procesamiento lo informa y queda listo para reintentar", async () => {
+  it("si falla el procesamiento lo informa y vuelve al menú", async () => {
     const { say } = setup({ procesar: async () => Promise.reject(new Error("timeout de Claude")) });
-    let outs = await say(CARGADOR, "total p1", [pdfAdj()]);
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "total p1", [pdfAdj()]);
     expect(texts(outs)).toMatch(/No pude procesar el PDF: timeout de Claude/);
-    outs = await say(CARGADOR, "total p1");
-    expect(texts(outs)).toMatch(/Mandá el PDF/);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
+  });
+
+  it("los cargadores no consultan: un DNI les abre el menú de carga", async () => {
+    const { say } = setup();
+    const outs = await say(CARGADOR, "33615617");
+    expect(texts(outs)).not.toMatch(/habilitado/);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios"]);
   });
 });
 
 describe("chofer", () => {
-  async function conCarnets() {
-    const ctx = setup();
-    await ctx.say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await ctx.say(CARGADOR, "Confirmar carga");
-    return ctx;
-  }
-
-  it("saluda con el nombre configurado y pide el DNI", async () => {
+  it("saludo cordial con imagen y menú Chofer / Vehículo", async () => {
     const { say } = setup();
     const outs = await say(CHOFER, "hola");
-    expect(texts(outs)).toMatch(/Hola, soy Javier/);
-    expect(outs).toHaveLength(1);
+    expect(outs[0]).toEqual({ kind: "image", caption: expect.stringMatching(/¡Hola! Soy \*Javier\*/) });
+    expect(texts(outs)).toMatch(/Qué documentación querés consultar/);
+    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo"]);
   });
 
-  it("DNI -> plantas habilitadas + documentación -> botón para su carnet", async () => {
-    const { say } = await conCarnets();
-    let outs = await say(CHOFER, "cheee puedo entrar? 33.615.617");
+  it("Chofer -> DNI -> vencimientos -> ¿te paso el carnet? -> su carnet con el ID de la consulta", async () => {
+    const { say } = setup();
+    await cargar(say, "👤 Choferes", "Total planta 1");
+    await say(CHOFER, "hola");
+
+    let outs = await say(CHOFER, "👤 Chofer");
+    expect(texts(outs)).toMatch(/Pasame el \*DNI\* del chofer/);
+
+    outs = await say(CHOFER, "33.615.617");
     const t = texts(outs);
-    expect(t).toMatch(/Hola, soy Javier/);
     expect(t).toMatch(/PERSONA 33615617/);
     expect(t).toMatch(/TOTAL AUSTRAL \(PRUEBA\) – Planta 1: ⚠️ habilitado hasta 18\/10\/2026 \(vence en 3 días\)/);
     expect(t).toMatch(/Licencia: ✅ 10\/03\/2027/);
     expect(t).toMatch(/ART: ❌ venció el 01\/10\/2026/);
-    expect(buttons(outs)).toEqual(["📄 Sí, mandámelo", "No, gracias"]);
+    expect(t).toMatch(/Querés que te pase el carnet/);
+    expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "No, gracias"]);
 
-    outs = await say(CHOFER, "📄 Sí, mandámelo");
-    const file = outs.find((o) => o.kind === "file");
-    expect(file).toMatchObject({ kind: "file", filename: "33615617.pdf" });
-    expect((file as Extract<Outbound, { kind: "file" }>).data.toString()).toContain("33615617"); // SU carnet
+    outs = await say(CHOFER, "📄 Sí, pasámelo");
+    const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
+    expect(file.filename).toBe("33615617.pdf");
+    expect(file.data.toString()).toContain("33615617"); // SU carnet
     expect(buttons(outs)).toEqual(["Otra consulta", "Eso es todo"]);
+
+    outs = await say(CHOFER, "Eso es todo");
+    expect(texts(outs)).toMatch(/Gracias por comunicarte/);
+  });
+
+  it("Vehículo -> patente -> vencimientos (seguro y VTV) -> su carnet", async () => {
+    const { say } = setup({
+      procesar: async () => resultado([carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null })]),
+    });
+    await cargar(say, "🚛 Dominios", "Total planta 1");
+    await say(CHOFER, "hola");
+    await say(CHOFER, "🚛 Vehículo");
+    let outs = await say(CHOFER, "af 498 zj");
+    expect(texts(outs)).toMatch(/Patente \*AF498ZJ\*/);
+    expect(texts(outs)).toMatch(/Planta 1: ✅ habilitado hasta 31\/12\/2026/);
+    expect(texts(outs)).toMatch(/Seguro: ✅/);
+    outs = await say(CHOFER, "📄 Sí, pasámelo");
+    expect(outs.find((o) => o.kind === "file")).toMatchObject({ filename: "AF498ZJ.pdf" });
+  });
+
+  it("si escribe el DNI de entrada, saluda y responde sin pasar por el menú", async () => {
+    const { say } = setup();
+    await cargar(say, "👤 Choferes", "Total planta 1");
+    const outs = await say(CHOFER, "cheee puedo entrar? 33615617");
+    expect(outs[0]!.kind).toBe("image");
+    expect(texts(outs)).toMatch(/Planta 1: ⚠️ habilitado/);
   });
 
   it("habilitado en varias plantas: las muestra todas y ofrece cada carnet", async () => {
-    const ctx = await conCarnets();
-    await ctx.say(CARGADOR, "total planta 2", [pdfAdj()]);
-    await ctx.say(CARGADOR, "Confirmar carga");
-    const outs = await ctx.say(CHOFER, "33615617");
+    const { say } = setup();
+    await cargar(say, "👤 Choferes", "Total planta 1");
+    await cargar(say, "👤 Choferes", "Total planta 2");
+    const outs = await say(CHOFER, "33615617");
     expect(texts(outs)).toMatch(/Planta 1: .*habilitado/);
     expect(texts(outs)).toMatch(/Planta 2: .*habilitado/);
     expect(buttons(outs)).toEqual(["Total P1", "Total P2", "No, gracias"]);
   });
 
   it("pregunta por una planta donde no tiene credencial", async () => {
-    const { say } = await conCarnets();
+    const { say } = setup();
+    await cargar(say, "👤 Choferes", "Total planta 1");
     const outs = await say(CHOFER, "puedo entrar a vista planta 1? 33615617");
     expect(texts(outs)).toMatch(/No tenés credencial cargada para \*VISTA ENERGY \(PRUEBA\) – Planta 1\*/);
   });
 
-  it("primero la planta y después el DNI", async () => {
-    const { say } = await conCarnets();
-    let outs = await say(CHOFER, "puedo entrar a total planta 1?");
-    expect(texts(outs)).toMatch(/Pasame tu \*DNI\*.*TOTAL AUSTRAL \(PRUEBA\) – Planta 1/s);
-    outs = await say(CHOFER, "33615617");
-    expect(texts(outs)).toMatch(/Planta 1: ⚠️ habilitado/);
+  it("DNI inválido después de elegir Chofer", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    await say(CHOFER, "👤 Chofer");
+    const outs = await say(CHOFER, "123");
+    expect(texts(outs)).toMatch(/El DNI tiene que tener 7 u 8 números/);
   });
 
-  it("DNI sin credenciales: lo dice y muestra la documentación igual", async () => {
+  it("DNI sin credenciales: lo dice, muestra la documentación y ofrece otra consulta", async () => {
     const { say } = setup();
+    await say(CHOFER, "hola");
     const outs = await say(CHOFER, "30123456");
     expect(texts(outs)).toMatch(/No encontré credenciales de ingreso/);
     expect(texts(outs)).toMatch(/Licencia/);
     expect(buttons(outs)).toEqual(["Otra consulta", "Eso es todo"]);
   });
 
-  it("un chofer que manda un PDF recibe el aviso de que es solo para consultas", async () => {
+  it("si manda un PDF se le avisa que el número es sólo para consultas", async () => {
     const { say, procesar } = setup();
+    await say(CHOFER, "hola");
     const outs = await say(CHOFER, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/no se reciben archivos: es solo para consultas/);
+    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo"]);
     expect(procesar).not.toHaveBeenCalled();
-  });
-
-  it("los cargadores no consultan: un DNI es para ellos un dato de carga", async () => {
-    const { say } = setup();
-    const outs = await say(CARGADOR, "33615617");
-    expect(texts(outs)).not.toMatch(/habilitado/);
-    expect(texts(outs)).toMatch(/Mandá cliente, planta y el PDF/);
   });
 });
 

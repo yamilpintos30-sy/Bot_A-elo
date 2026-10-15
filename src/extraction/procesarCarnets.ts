@@ -12,6 +12,8 @@ import type { Manifest } from "./manifest.js";
 import { reviewCarnets, type ReviewResult } from "./review.js";
 import { CarnetVerifier } from "./verifier.js";
 
+export type EtapaProceso = "separando" | "verificando";
+
 export interface ProcesamientoResultado extends ReviewResult {
   formato: string | null;
   notaModelo: string;
@@ -38,10 +40,13 @@ export class ProcesadorCarnets {
     this.timezone = config.TIMEZONE;
   }
 
-  async procesar(pdf: Buffer, filename: string): Promise<ProcesamientoResultado> {
+  /** `onEtapa` avisa en qué paso está (el bot lo usa para mantener informado al cargador). */
+  async procesar(pdf: Buffer, filename: string, onEtapa?: (etapa: EtapaProceso) => Promise<void> | void): Promise<ProcesamientoResultado> {
     const started = Date.now();
     const usage = emptyUsage();
+    await onEtapa?.("separando");
     const extraccion = await this.extractor.extract(pdf, filename, usage);
+    await onEtapa?.("verificando");
     const verificacion = await this.verifier.verify(extraccion.archivos, usage);
     const review = reviewCarnets({
       manifest: extraccion.manifest,

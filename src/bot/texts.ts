@@ -46,24 +46,47 @@ export function vigente(valor: string | null | undefined, hoy: CalendarDate): bo
 
 // --- Cargadores ------------------------------------------------------------------
 
+/** "choferes" / "dominios" y su emoji, para los textos del cargador. */
+export const TIPO = {
+  chofer: { plural: "choferes", emoji: "👤", carnets: "carnets de personas" },
+  dominio: { plural: "dominios", emoji: "🚛", carnets: "carnets de vehículos" },
+} as const;
+
 export const CARGA = {
-  instrucciones: "Mandá cliente, planta y el PDF (en el mismo mensaje o por separado).\nEjemplo: *Total planta 1* + PDF",
-  elegirCliente: "¿Para qué cliente es?",
-  elegirPlanta: (cliente: string) => `¿Qué planta de ${cliente}?`,
+  menu: "¿Qué documentación vas a cargar?",
+  otraCarga: "¿Querés cargar otra documentación?",
+  pedirClienteSubcliente: (tipo: "chofer" | "dominio") =>
+    `${TIPO[tipo].emoji} Carga de *${TIPO[tipo].plural}*.\nIndicá *cliente y subcliente*. Ejemplo: *Total Planta 1*`,
+  clienteNoEncontrado: (clientes: string[]) => `❌ No encontré ese cliente. Clientes disponibles:\n${clientes.map((c) => `• ${c}`).join("\n")}\nVolvé a escribir cliente y subcliente.`,
+  elegirPlanta: (cliente: string) => `¿Qué subcliente de ${cliente}?`,
   listaOpciones: (titulo: string, opciones: string[]) => `${titulo}\nEscribí una de estas opciones:\n${opciones.map((o) => `• ${o}`).join("\n")}`,
-  plantaNoEncontrada: (cliente: string, plantas: string[]) => `No encontré esa planta en ${cliente}. Plantas: ${plantas.join(", ")}.`,
-  pedirPdf: (destino: string) => `📄 Mandá el PDF para *${destino}*.`,
+  plantaNoEncontrada: (cliente: string, plantas: string[]) => `❌ No encontré ese subcliente en ${cliente}. Subclientes: ${plantas.join(", ")}.`,
+  encontrado: (destino: string, tipo: "chofer" | "dominio") => `✅ Cliente y subcliente encontrados: *${destino}*.\n📄 Mandá el PDF con los ${TIPO[tipo].carnets}.`,
   soloPdf: "Solo se aceptan archivos PDF.",
   unPdfPorVez: "Mandá un PDF por vez. Proceso el primero.",
-  procesando: (archivo: string, destino: string) => `⏳ Procesando *${archivo}* para *${destino}*. Tarda 1 o 2 minutos.`,
+  recibido: (archivo: string) => `📥 Recibí *${archivo}*. Estoy separando los carnets del PDF; puede tardar uno o dos minutos.`,
+  verificando: "🔎 Carnets separados. Estoy verificando los datos de cada uno.",
+  sigue: "⏳ Sigue en proceso, aguardá un momento por favor.",
   noDescarga: "❌ No pude descargar el PDF. Mandalo de nuevo.",
   noEsPdf: "❌ El archivo no es un PDF válido. Mandalo de nuevo.",
   falloProceso: (motivo: string) => `❌ No pude procesar el PDF: ${motivo}\nMandalo de nuevo.`,
   pendiente: "Hay una carga pendiente de confirmar. Confirmala o cancelala antes de mandar otra.",
   cancelada: "❌ Carga cancelada. No se cargó nada.",
   expirada: "⚠️ La carga pendiente expiró. Mandá el PDF de nuevo.",
-  cargando: (n: number) => `⏳ Cargando ${n} carnet${n === 1 ? "" : "s"} en SEA WHITE…`,
+  cargando: (n: number) => `📤 Guardando ${n} carnet${n === 1 ? "" : "s"} en el sistema…`,
+  /** Filtro de tipo: eligió un tipo y el PDF trae TODO del otro. */
+  tipoIncorrecto: (elegido: "chofer" | "dominio", otro: "chofer" | "dominio", n: number) =>
+    `⚠️ Elegiste cargar *${TIPO[elegido].plural}*, pero el PDF tiene ${n} ${TIPO[otro].carnets} (${TIPO[otro].plural}).\nNo se cargó nada. ¿Qué hago?`,
 };
+
+/** Filtro de tipo: el PDF trae carnets del tipo elegido y también del otro. */
+export function avisoTipoMezclado(elegido: "chofer" | "dominio", otros: CarnetListo[]): string {
+  const otro = elegido === "chofer" ? "dominio" : "chofer";
+  return [
+    `⚠️ El PDF también tiene ${otros.length} ${TIPO[otro].carnets}, que NO se van a cargar porque elegiste *${TIPO[elegido].plural}*:`,
+    ...otros.map((c) => `• pág. ${c.pagina}: ${c.apellidoNombre ? `${c.apellidoNombre} (${c.identificador})` : c.identificador}`),
+  ].join("\n");
+}
 
 function lineaRechazo(r: CarnetRechazado): string {
   const donde = r.pagina ? `pág. ${r.pagina}` : "";
@@ -113,18 +136,19 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
 // --- Choferes --------------------------------------------------------------------
 
 export const CONSULTA = {
-  saludo: (bot: string) =>
-    `👋 Hola, soy ${bot}, el asistente de SEA WHITE para el ingreso a planta.\nPasame tu *DNI* (o la *patente* del vehículo) y te digo en qué plantas estás habilitado.`,
-  pedirDni: "Para consultar necesito tu *DNI* (solo números) o la *patente* del vehículo.",
-  pedirDniPara: (destino: string) => `Pasame tu *DNI* (o la patente) y te digo si estás habilitado para *${destino}*.`,
-  sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas.\nPasame tu *DNI* o la *patente* y te digo en qué plantas estás habilitado.",
-  preguntaCarnet: "¿Necesitás el carnet?",
-  elegirCarnet: "¿De qué planta necesitás el carnet?",
+  saludo: (bot: string) => `👋 ¡Hola! Soy *${bot}*, el asistente de SEA WHITE para el ingreso a planta.`,
+  menu: "¿Qué documentación querés consultar?",
+  pedirDni: "👤 Pasame el *DNI* del chofer (solo números, sin puntos).",
+  pedirPatente: "🚛 Pasame la *patente* (dominio) del vehículo. Ejemplo: AA123BB",
+  dniInvalido: (error: string) => `❌ ${error}`,
+  patenteInvalida: (error: string) => `❌ ${error}`,
+  pedirDatoPara: (destino: string) => `Para saber si podés entrar a *${destino}*, elegí qué querés consultar.`,
+  sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas de vencimientos.",
+  preguntaCarnet: "¿Querés que te pase el carnet?",
+  elegirCarnet: "¿De qué planta querés el carnet?",
   algoMas: "¿Necesitás algo más?",
-  otraConsulta: "Pasame el *DNI* o la *patente* que querés consultar.",
-  despedida: "👍 Listo. Cuando necesites, escribime.",
+  despedida: "👍 Gracias por comunicarte con SEA WHITE. Cuando necesites, escribime.",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
-  errorConsulta: "No pude consultar en este momento. Probá de nuevo en unos minutos.",
 };
 
 export interface LineaPlanta {

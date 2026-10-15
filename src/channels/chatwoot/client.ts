@@ -59,6 +59,43 @@ export class ChatwootClient {
     this.opts.echo.recordId(created.id);
   }
 
+  /** Imagen con epígrafe. Devuelve el id del mensaje (para esperar su entrega). */
+  async sendImage(conversationId: string, caption: string, image: Buffer, filename: string): Promise<string | null> {
+    this.opts.echo.recordText(conversationId, caption);
+    const ext = filename.toLowerCase().split(".").pop() ?? "jpg";
+    const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    const form = new FormData();
+    form.append("content", caption);
+    form.append("message_type", "outgoing");
+    form.append("attachments[]", new Blob([new Uint8Array(image)], { type: mime }), filename);
+    const created = await this.send(`/conversations/${conversationId}/messages`, form);
+    this.opts.echo.recordId(created.id);
+    return created.id !== undefined ? String(created.id) : null;
+  }
+
+  /**
+   * Espera a que WhatsApp confirme la ENTREGA de un mensaje (delivered/read).
+   * Aprendido en Enri: sin esto, la imagen del saludo llegaba DESPUÉS de los
+   * botones, porque Meta tarda más en procesar las imágenes.
+   */
+  async waitDelivered(conversationId: string, messageId: string, timeoutMs = 15_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    const url = `${this.opts.baseUrl.replace(/\/$/, "")}/api/v1/accounts/${this.opts.accountId}/conversations/${conversationId}/messages`;
+    while (Date.now() < deadline) {
+      try {
+        const res = await this.fetchWithTimeout(url, { headers: { api_access_token: this.opts.apiToken } });
+        const data = (await res.json()) as { payload?: Array<{ id?: number; status?: string }> };
+        const status = data.payload?.find((m) => String(m.id) === messageId)?.status;
+        if (status === "delivered" || status === "read") return true;
+        if (status === "failed") return false;
+      } catch {
+        // Error transitorio: se sigue esperando hasta el plazo.
+      }
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    return false;
+  }
+
   /**
    * Descarga un adjunto recibido. Las URLs de Chatwoot suelen ser públicas
    * (firmadas); si responden 401/403 se reintenta con el token.

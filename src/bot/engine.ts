@@ -56,7 +56,7 @@ export class BotEngine {
     const emit = async (out: Outbound) => {
       if (out.kind === "buttons") session.botones = out.buttons;
       await this.channel.send(msg.conversationId, out);
-      const content = out.kind === "file" ? `[archivo] ${out.filename}` : out.text;
+      const content = out.kind === "file" ? `[archivo] ${out.filename}` : out.kind === "image" ? `[imagen] ${out.caption}` : out.text;
       void deps.log.log({ conversationId: msg.conversationId, phone: session.phone, direction: "out", rol: session.rol, content });
     };
 

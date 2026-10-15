@@ -22,6 +22,8 @@ const booleanFromEnv = z
 export const generalSchema = z.object({
   /** Nombre con el que se presenta a los choferes (configurable sin tocar código). */
   BOT_NAME: z.string().default("Javier"),
+  /** Imagen del saludo a los choferes (avatar). Si no existe el archivo, el saludo sale sólo con texto. */
+  WELCOME_IMAGE: z.string().default("assets/javier.jpg"),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   TIMEZONE: z.string().default("America/Argentina/Buenos_Aires"),
