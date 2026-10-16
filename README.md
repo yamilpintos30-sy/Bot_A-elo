@@ -72,10 +72,12 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 
 **Choferes** (cualquier otro número):
 1. Saludo cordial con la imagen de Javier (`WELCOME_IMAGE`, por defecto `assets/javier.jpg`; sin imagen, sale solo texto).
-2. Menú **[👤 Chofer] [🚛 Vehículo]**: pide el DNI o la patente.
-3. Muestra los vencimientos: plantas habilitadas, más licencia, ART y F.931 (o seguro y VTV). De esa consulta guarda el **ID del carnet**.
-4. "¿Querés que te pase el carnet?" → con ese ID trae el PDF y lo manda.
-5. Si escribe el DNI o la patente directamente, responde sin pasar por el menú. Si manda un archivo, se le avisa que el número es solo para consultas.
+2. **Primero cliente y subcliente** ("¿A qué planta vas?"), cotejados contra la tabla: un mismo DNI o patente puede estar cargado en varias plantas, y la API consulta por cliente + subcliente.
+3. **[👤 Chofer] [🚛 Vehículo]**: pide el DNI o la patente. Si los mandó antes de decir la planta, los recuerda y los consulta apenas la elige.
+4. Vencimiento en **esa** planta (GET a SEA WHITE, del que se toma el **ID del carnet**), más licencia, ART y F.931 (o seguro y VTV).
+5. "¿Querés que te pase el carnet?" → con ese ID trae el PDF y lo manda. El bot espera que WhatsApp lo entregue antes de seguir.
+6. Al terminar: **[Menú 😊]** vuelve a pedir cliente y subcliente; **[🔎 Consulta]** hace otra consulta en el mismo cliente y subcliente; **[Eso es todo, gracias]** cierra.
+7. Si manda un archivo, se le avisa que el número es solo para consultas.
 
 ## Comandos
 

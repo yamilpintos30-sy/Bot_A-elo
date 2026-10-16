@@ -288,20 +288,27 @@ describe("cargador", () => {
 });
 
 describe("chofer", () => {
-  it("saludo cordial con imagen y menú Chofer / Vehículo", async () => {
+  const MENU_TIPO = ["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"];
+  const FIN_CONSULTA = ["Menú 😊", "🔎 Consulta", "Eso es todo, gracias"];
+
+  it("saluda con imagen y PRIMERO pide cliente y subcliente", async () => {
     const { say } = setup();
     const outs = await say(CHOFER, "hola");
     expect(outs[0]).toEqual({ kind: "image", caption: expect.stringMatching(/¡Hola! Soy \*Javier\*/) });
-    expect(texts(outs)).toMatch(/Qué documentación querés consultar/);
-    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"]);
+    expect(texts(outs)).toMatch(/A qué planta vas a ingresar\? Escribí \*cliente y subcliente\*/);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
   });
 
-  it("Chofer -> DNI -> vencimientos -> ¿te paso el carnet? -> su carnet con el ID de la consulta", async () => {
+  it("cliente y subcliente -> Chofer -> DNI -> vencimiento en ESA planta -> su carnet -> Menú/Consulta/Eso es todo", async () => {
     const { say } = setup();
     await cargar(say, "👤 Choferes", "Total planta 1");
     await say(CHOFER, "hola");
 
-    let outs = await say(CHOFER, "👤 Chofer");
+    let outs = await say(CHOFER, "Total planta 1");
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(buttons(outs)).toEqual(MENU_TIPO);
+
+    outs = await say(CHOFER, "👤 Chofer");
     expect(texts(outs)).toMatch(/Pasame el \*DNI\* del chofer/);
 
     outs = await say(CHOFER, "33.615.617");
@@ -310,90 +317,130 @@ describe("chofer", () => {
     expect(t).toMatch(/TOTAL AUSTRAL \(PRUEBA\) – Planta 1: ⚠️ habilitado hasta 18\/10\/2026 \(vence en 3 días\)/);
     expect(t).toMatch(/Licencia: ✅ 10\/03\/2027/);
     expect(t).toMatch(/ART: ❌ venció el 01\/10\/2026/);
-    expect(t).toMatch(/Querés que te pase el carnet/);
-    expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "Menú 😊", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "No, gracias"]);
 
     outs = await say(CHOFER, "📄 Sí, pasámelo");
-    const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
+    const iFile = outs.findIndex((o) => o.kind === "file");
+    const file = outs[iFile] as Extract<Outbound, { kind: "file" }>;
     expect(file.filename).toBe("33615617.pdf");
     expect(file.data.toString()).toContain("33615617"); // SU carnet
-    expect(buttons(outs)).toEqual(["Menú 😊", "Eso es todo, gracias"]);
-
-    outs = await say(CHOFER, "Eso es todo");
-    expect(texts(outs)).toMatch(/Gracias por comunicarte/);
+    // El "¿Necesitás algo más?" va DESPUÉS del carnet.
+    const iAlgoMas = outs.findIndex((o) => o.kind === "buttons" && /Necesitás algo más/.test(o.text));
+    expect(iAlgoMas).toBeGreaterThan(iFile);
+    expect(buttons(outs)).toEqual(FIN_CONSULTA);
   });
 
-  it("Vehículo -> patente -> vencimientos (seguro y VTV) -> su carnet", async () => {
+  it("[🔎 Consulta] mantiene el cliente y subcliente; [Menú 😊] los borra y los vuelve a pedir", async () => {
     const { say } = setup({
       procesar: async () => resultado([carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null })]),
     });
     await cargar(say, "🚛 Dominios", "Total planta 1");
     await say(CHOFER, "hola");
+    await say(CHOFER, "Total planta 1");
+    await say(CHOFER, "👤 Chofer");
+    let outs = await say(CHOFER, "30123456"); // sin credencial: cierra con Menú / Consulta / Eso es todo
+    expect(buttons(outs)).toEqual(FIN_CONSULTA);
+
+    outs = await say(CHOFER, "🔎 Consulta");
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/); // misma planta
+    expect(buttons(outs)).toEqual(MENU_TIPO);
     await say(CHOFER, "🚛 Vehículo");
-    let outs = await say(CHOFER, "af 498 zj");
-    expect(texts(outs)).toMatch(/Patente \*AF498ZJ\*/);
-    expect(texts(outs)).toMatch(/Planta 1: ✅ habilitado hasta 31\/12\/2026/);
+    outs = await say(CHOFER, "AF498ZJ");
+    expect(texts(outs)).toMatch(/Patente \*AF498ZJ\*.*Planta 1: ✅ habilitado hasta 31\/12\/2026/s);
     expect(texts(outs)).toMatch(/Seguro: ✅/);
-    outs = await say(CHOFER, "📄 Sí, pasámelo");
-    expect(outs.find((o) => o.kind === "file")).toMatchObject({ filename: "AF498ZJ.pdf" });
+
+    outs = await say(CHOFER, "Menú 😊");
+    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
   });
 
-  it("si escribe el DNI de entrada, saluda y responde sin pasar por el menú", async () => {
+  it("cliente con varias plantas: pide el subcliente con botones", async () => {
     const { say } = setup();
-    await cargar(say, "👤 Choferes", "Total planta 1");
-    const outs = await say(CHOFER, "cheee puedo entrar? 33615617");
-    expect(outs[0]!.kind).toBe("image");
-    expect(texts(outs)).toMatch(/Planta 1: ⚠️ habilitado/);
+    await say(CHOFER, "hola");
+    let outs = await say(CHOFER, "Total Austral");
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    outs = await say(CHOFER, "Planta 2");
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
   });
 
-  it("habilitado en varias plantas: las muestra todas y ofrece cada carnet", async () => {
+  it("cliente con una sola planta: no pregunta el subcliente", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    const outs = await say(CHOFER, "vista");
+    expect(texts(outs)).toMatch(/✅ \*VISTA ENERGY \(PRUEBA\) – Planta 1\*/);
+  });
+
+  it("si manda el DNI antes que la planta, lo recuerda y lo consulta al elegirla", async () => {
     const { say } = setup();
     await cargar(say, "👤 Choferes", "Total planta 1");
-    await cargar(say, "👤 Choferes", "Total planta 2");
+    let outs = await say(CHOFER, "cheee puedo entrar? 33615617");
+    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
+    outs = await say(CHOFER, "Total planta 1");
+    expect(texts(outs)).toMatch(/PERSONA 33615617.*Planta 1: ⚠️ habilitado/s);
+  });
+
+  it("consulta SOLO la planta declarada: el mismo DNI en otra planta no cuenta", async () => {
+    const { say } = setup();
+    await cargar(say, "👤 Choferes", "Total planta 1");
+    await say(CHOFER, "hola");
+    await say(CHOFER, "Total planta 2");
+    await say(CHOFER, "👤 Chofer");
     const outs = await say(CHOFER, "33615617");
-    expect(texts(outs)).toMatch(/Planta 1: .*habilitado/);
-    expect(texts(outs)).toMatch(/Planta 2: .*habilitado/);
-    expect(buttons(outs)).toEqual(["Total P1", "Total P2", "Eso es todo, gracias"]);
+    expect(texts(outs)).toMatch(/No tenés credencial cargada para \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
+    expect(buttons(outs)).toEqual(FIN_CONSULTA);
   });
 
-  it("pregunta por una planta donde no tiene credencial", async () => {
+  it("cliente inexistente: lo dice y vuelve a pedir cliente y subcliente", async () => {
     const { say } = setup();
-    await cargar(say, "👤 Choferes", "Total planta 1");
-    const outs = await say(CHOFER, "puedo entrar a vista planta 1? 33615617");
-    expect(texts(outs)).toMatch(/No tenés credencial cargada para \*VISTA ENERGY \(PRUEBA\) – Planta 1\*/);
+    await say(CHOFER, "hola");
+    const outs = await say(CHOFER, "Shell planta 2");
+    expect(texts(outs)).toMatch(/No encontré ese cliente.*Total Austral.*Vista Energy/s);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+  });
+
+  it("subcliente inexistente: lo dice y ofrece los del cliente", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    const outs = await say(CHOFER, "total planta 9");
+    expect(texts(outs)).toMatch(/No encontré ese subcliente en Total Austral/);
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
   });
 
   it("DNI inválido después de elegir Chofer", async () => {
     const { say } = setup();
     await say(CHOFER, "hola");
+    await say(CHOFER, "Total planta 1");
     await say(CHOFER, "👤 Chofer");
     const outs = await say(CHOFER, "123");
     expect(texts(outs)).toMatch(/El DNI tiene que tener 7 u 8 números/);
   });
 
-  it("DNI sin credenciales: lo dice, muestra la documentación y cierra con Menú y Eso es todo", async () => {
+  it("'No, gracias' al carnet -> ¿Necesitás algo más? con Menú / Consulta / Eso es todo", async () => {
     const { say } = setup();
+    await cargar(say, "👤 Choferes", "Total planta 1");
     await say(CHOFER, "hola");
-    const outs = await say(CHOFER, "30123456");
-    expect(texts(outs)).toMatch(/No encontré credenciales de ingreso/);
-    expect(texts(outs)).toMatch(/Licencia/);
-    expect(buttons(outs)).toEqual(["Menú 😊", "Eso es todo, gracias"]);
+    await say(CHOFER, "Total planta 1");
+    await say(CHOFER, "33615617");
+    const outs = await say(CHOFER, "No, gracias");
+    expect(texts(outs)).toMatch(/Necesitás algo más/);
+    expect(buttons(outs)).toEqual(FIN_CONSULTA);
   });
 
-  it("si manda un PDF se le avisa que el número es sólo para consultas", async () => {
+  it("si manda un PDF se le avisa que es sólo para consultas y sigue en el paso donde estaba", async () => {
     const { say, procesar } = setup();
     await say(CHOFER, "hola");
     const outs = await say(CHOFER, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/no se reciben archivos: es solo para consultas/);
-    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"]);
+    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
     expect(procesar).not.toHaveBeenCalled();
   });
 });
 
 describe("pie y cierre (como Enri)", () => {
-  it("toda respuesta de texto cierra con [Menú 😊] [Eso es todo, gracias] en el mismo mensaje", async () => {
+  it("un texto suelto cierra con [Menú 😊] [Eso es todo, gracias] en el mismo mensaje", async () => {
     const { say } = setup();
     await say(CHOFER, "hola");
+    await say(CHOFER, "Total planta 1");
     const outs = await say(CHOFER, "👤 Chofer");
     expect(outs).toHaveLength(1);
     expect(outs[0]).toMatchObject({ kind: "buttons", text: expect.stringMatching(/Pasame el \*DNI\*/), buttons: [{ title: "Menú 😊" }, { title: "Eso es todo, gracias" }] });
@@ -417,14 +464,6 @@ describe("pie y cierre (como Enri)", () => {
     const { say } = setup();
     await say(CHOFER, "hola");
     expect(texts(await say(CHOFER, "nada más"))).toMatch(/Gracias por comunicarte/);
-  });
-
-  it("[Menú 😊] vuelve al menú en cualquier momento", async () => {
-    const { say } = setup();
-    await say(CHOFER, "hola");
-    await say(CHOFER, "👤 Chofer");
-    const outs = await say(CHOFER, "Menú 😊");
-    expect(buttons(outs)).toEqual(["👤 Chofer", "🚛 Vehículo", "Eso es todo, gracias"]);
   });
 
   it("el cargador que cierra con una carga sin confirmar la cancela", async () => {

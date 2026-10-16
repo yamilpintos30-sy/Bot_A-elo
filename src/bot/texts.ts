@@ -145,15 +145,18 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
 
 export const CONSULTA = {
   saludo: (bot: string) => `👋 ¡Hola! Soy *${bot}*, el asistente de SEA WHITE para el ingreso a planta.`,
+  pedirClienteSubcliente: "¿A qué planta vas a ingresar? Escribí *cliente y subcliente*.\nEjemplo: *Total Planta 1*",
+  elegirPlanta: (cliente: string) => `¿Qué subcliente (planta) de ${cliente}?`,
+  clienteNoEncontrado: (clientes: string[]) => `❌ No encontré ese cliente. Clientes disponibles:\n${clientes.map((c) => `• ${c}`).join("\n")}\nVolvé a escribir cliente y subcliente.`,
+  plantaNoEncontrada: (cliente: string, plantas: string[]) => `❌ No encontré ese subcliente en ${cliente}. Subclientes: ${plantas.join(", ")}.`,
+  destinoOk: (destino: string) => `✅ *${destino}*.\n¿Qué documentación querés consultar?`,
   menu: "¿Qué documentación querés consultar?",
   pedirDni: "👤 Pasame el *DNI* del chofer (solo números, sin puntos).",
   pedirPatente: "🚛 Pasame la *patente* (dominio) del vehículo. Ejemplo: AA123BB",
   dniInvalido: (error: string) => `❌ ${error}`,
   patenteInvalida: (error: string) => `❌ ${error}`,
-  pedirDatoPara: (destino: string) => `Para saber si podés entrar a *${destino}*, elegí qué querés consultar.`,
   sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas de vencimientos.",
   preguntaCarnet: "¿Querés que te pase el carnet?",
-  elegirCarnet: "¿De qué planta querés el carnet?",
   algoMas: "¿Necesitás algo más?",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
 };

@@ -30,9 +30,14 @@ export class ChatwootChannel implements Channel {
         await this.client.sendButtons(conversationId, parts[parts.length - 1]!, out.buttons);
         return;
       }
-      case "file":
-        await this.client.sendFile(conversationId, out.filename, out.data, out.caption);
+      case "file": {
+        // Igual que con la imagen del saludo: WhatsApp procesa el PDF más lento
+        // que un texto, y el "¿Necesitás algo más?" llegaba ANTES que el carnet.
+        // Se espera la confirmación de entrega antes de seguir.
+        const id = await this.client.sendFile(conversationId, out.filename, out.data, out.caption);
+        await this.esperarEntrega(conversationId, id);
         return;
+      }
       case "image": {
         const image = await this.loadWelcomeImage();
         if (!image) {
@@ -41,11 +46,17 @@ export class ChatwootChannel implements Channel {
         }
         const id = await this.client.sendImage(conversationId, out.caption, image, path.basename(this.welcomeImagePath!));
         // Que la imagen llegue antes que los botones que siguen.
-        const entregada = id ? await this.client.waitDelivered(conversationId, id) : false;
-        await new Promise((r) => setTimeout(r, entregada ? 600 : 3000));
+        await this.esperarEntrega(conversationId, id);
         return;
       }
     }
+  }
+
+  /** Espera la entrega real (delivered/read); si no se confirma, pausa de seguridad. */
+  private async esperarEntrega(conversationId: string, messageId: string | null): Promise<void> {
+    const entregado = messageId ? await this.client.waitDelivered(conversationId, messageId) : false;
+    if (!entregado) this.logger.warn({ conversationId, messageId }, "No se confirmó la entrega del adjunto; pausa de seguridad");
+    await new Promise((r) => setTimeout(r, entregado ? 600 : 3000));
   }
 
   private async loadWelcomeImage(): Promise<Buffer | null> {

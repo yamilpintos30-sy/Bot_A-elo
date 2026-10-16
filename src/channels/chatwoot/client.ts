@@ -49,7 +49,8 @@ export class ChatwootClient {
     this.opts.echo.recordId(created.id);
   }
 
-  async sendFile(conversationId: string, filename: string, data: Buffer, caption = ""): Promise<void> {
+  /** Archivo PDF con epígrafe. Devuelve el id del mensaje (para esperar su entrega). */
+  async sendFile(conversationId: string, filename: string, data: Buffer, caption = ""): Promise<string | null> {
     this.opts.echo.recordText(conversationId, caption || filename);
     const form = new FormData();
     form.append("content", caption);
@@ -57,6 +58,7 @@ export class ChatwootClient {
     form.append("attachments[]", new Blob([new Uint8Array(data)], { type: "application/pdf" }), filename);
     const created = await this.send(`/conversations/${conversationId}/messages`, form);
     this.opts.echo.recordId(created.id);
+    return created.id !== undefined ? String(created.id) : null;
   }
 
   /** Imagen con epígrafe. Devuelve el id del mensaje (para esperar su entrega). */

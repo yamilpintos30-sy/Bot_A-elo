@@ -70,11 +70,18 @@ export interface CarnetConsultado {
 /** Estado del flujo de consultas (choferes). */
 export interface ConsultaState {
   saludado: boolean;
-  /** Qué eligió consultar en el menú: espera un DNI (chofer) o una patente (dominio). */
-  esperando?: "chofer" | "dominio";
-  /** Cliente/planta que mencionó antes de dar el DNI ("¿puedo entrar a shell planta 2?"). */
+  /**
+   * Cliente y subcliente declarados AL PRINCIPIO: toda consulta es para esa
+   * planta (un DNI o una patente pueden estar en varias). [Menú] los borra;
+   * [Consulta] los conserva.
+   */
   clienteCodigo?: string;
   plantaCodigo?: string;
+  /** Qué eligió consultar: espera un DNI (chofer) o una patente (dominio). */
+  esperando?: "chofer" | "dominio";
+  /** DNI o patente que mandó ANTES de decir la planta: se consulta apenas la elija. */
+  pendiente?: { tipo: "chofer" | "dominio"; identificador: string };
+  /** Carnet de la última consulta (su ID de SEA WHITE se usa para mandar el PDF). */
   ultimos?: CarnetConsultado[];
 }
 
