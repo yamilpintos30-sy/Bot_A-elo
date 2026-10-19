@@ -224,6 +224,21 @@ describe("consultas", () => {
     ]);
   });
 
+  it("RESGUARDO: nunca entrega el comprobante de otra patente", async () => {
+    const f = fakeFetch((call) =>
+      new Response(PDF, {
+        headers: {
+          "Content-Type": "application/pdf",
+          // El de la VTV viene bien; el del seguro viene con OTRA patente.
+          "Content-Disposition": call.url.includes("/vtv/") ? 'attachment; filename="AF498ZJ.pdf"' : "attachment; filename=AG536VG.pdf; filename*=UTF-8''AG536VG.pdf",
+        },
+      }),
+    );
+    const c = client(f.fn, { cargaHabilitada: false });
+    expect(await c.documentoVehiculo("vtv", "AF498ZJ")).not.toBeNull();
+    await expect(c.documentoVehiculo("seguro", "AF498ZJ")).rejects.toThrow(/no corresponde a la patente AF498ZJ/);
+  });
+
   it("VTV y seguro: la lista blanca sólo acepta GET con tipo y dominio válidos", () => {
     expect(assertAllowedEndpoint("GET", "/api/DocumentosVehiculos/vtv/AF498ZJ").writes).toBe(false);
     expect(() => assertAllowedEndpoint("POST", "/api/DocumentosVehiculos/vtv/AF498ZJ")).toThrow(/BLOQUEADO/);
