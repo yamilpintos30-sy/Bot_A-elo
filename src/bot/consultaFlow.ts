@@ -82,7 +82,7 @@ export class ConsultaFlow {
     }
     if (payload === "carnet") return this.enviarCarnet(st, emit);
     if (payload === "nocarnet") return this.algoMas(emit, FIN_CONSULTA);
-    if (payload === "otrodoc") return this.enviarOtroDoc(st, emit);
+    if (payload === "otrodoc") return this.enviarOtroDoc(session, st, emit);
 
     const elegido = payload?.startsWith("m:") ? (payload.slice(2) as Modo) : opcionEscrita(msg.text);
     if (elegido) return this.elegir(st, elegido, clientes, emit);
@@ -108,7 +108,7 @@ export class ConsultaFlow {
       }
     }
 
-    if (st.modo === "vtv" || st.modo === "seguro") return this.pasoDocumento(st, st.modo, msg.text, emit);
+    if (st.modo === "vtv" || st.modo === "seguro") return this.pasoDocumento(session, st, st.modo, msg.text, emit);
     return this.pasoCredencial(st, st.modo, msg, payload, clientes, emit);
   }
 
@@ -140,7 +140,7 @@ export class ConsultaFlow {
 
   // --- VTV y seguro (sólo por dominio) ----------------------------------------------
 
-  private async pasoDocumento(st: ConsultaState, doc: Doc, texto: string, emit: Emit): Promise<void> {
+  private async pasoDocumento(session: Session, st: ConsultaState, doc: Doc, texto: string, emit: Emit): Promise<void> {
     const patente = findPatenteInText(texto);
     if (!patente) {
       if (texto.trim()) return emit({ kind: "text", text: CONSULTA.patenteInvalida(normalizePatente(texto).error ?? "Patente inválida.") });
@@ -148,7 +148,7 @@ export class ConsultaFlow {
     }
     st.ultimoDominio = patente;
     st.otroOfrecido = false;
-    await this.enviarDoc(doc, patente, emit);
+    await this.enviarDoc(session, doc, patente, emit);
     // Se ofrece el otro comprobante del mismo vehículo.
     st.otroOfrecido = true;
     const otro = otroDoc(doc);
@@ -159,19 +159,39 @@ export class ConsultaFlow {
     });
   }
 
-  private async enviarOtroDoc(st: ConsultaState, emit: Emit): Promise<void> {
+  private async enviarOtroDoc(session: Session, st: ConsultaState, emit: Emit): Promise<void> {
     const doc = st.modo === "vtv" || st.modo === "seguro" ? otroDoc(st.modo) : undefined;
     if (!doc || !st.ultimoDominio) return this.menuPrincipal(emit);
-    await this.enviarDoc(doc, st.ultimoDominio, emit);
+    await this.enviarDoc(session, doc, st.ultimoDominio, emit);
     return this.algoMas(emit, PIE);
   }
 
-  private async enviarDoc(doc: Doc, dominio: string, emit: Emit): Promise<void> {
+  /**
+   * Trae el comprobante y lo entrega SÓLO si el resguardo confirma que la
+   * patente pedida, la del nombre del archivo y la de adentro del PDF son la
+   * misma. Si no, responde que no está disponible y registra una falla crítica.
+   */
+  private async enviarDoc(session: Session, doc: Doc, dominio: string, emit: Emit): Promise<void> {
     try {
-      const pdf = await this.deps.seawhite.documentoVehiculo(doc, dominio);
-      if (!pdf) return emit({ kind: "text", text: CONSULTA.docNoEncontrado(doc, dominio), sinPie: true });
+      await emit({ kind: "text", text: CONSULTA.buscandoDoc(doc, dominio), sinPie: true });
+      const encontrado = await this.deps.seawhite.documentoVehiculo(doc, dominio);
+      if (!encontrado) return emit({ kind: "text", text: CONSULTA.docNoEncontrado(doc, dominio), sinPie: true });
+
+      const v = await this.deps.verificador.verificar(encontrado.pdf, doc, dominio, encontrado.nombreArchivo);
+      if (!v.ok) {
+        await this.deps.fallas.registrar({
+          tipo: "comprobante_no_coincide",
+          severidad: "critica",
+          descripcion: `${doc === "vtv" ? "VTV" : "Seguro"} de ${dominio} NO entregado: ${v.motivo ?? "no se pudo verificar"}`,
+          dominio,
+          conversationId: session.conversationId,
+          telefono: session.phone,
+          detalle: { documento: doc, ...v },
+        });
+        return emit({ kind: "text", text: CONSULTA.docNoVerificado(doc, dominio), sinPie: true });
+      }
       // El canal espera que WhatsApp entregue el PDF antes de mandar lo siguiente.
-      return emit({ kind: "file", filename: `${doc.toUpperCase()}_${dominio}.pdf`, data: pdf, caption: CONSULTA.docCaption(doc, dominio) });
+      return emit({ kind: "file", filename: `${doc.toUpperCase()}_${dominio}.pdf`, data: encontrado.pdf, caption: CONSULTA.docCaption(doc, dominio) });
     } catch (err) {
       this.deps.logger.error({ err }, "No se pudo traer el comprobante del vehículo");
       return emit({ kind: "text", text: CONSULTA.docNoDisponible, sinPie: true });

@@ -4,7 +4,9 @@
  */
 import type { EtapaProceso, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
 import type { Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
+import type { ResultadoVerificacion } from "../extraction/verificadorComprobantes.js";
 import type { CargadoresRepo } from "../storage/cargadores.js";
+import type { FallasRepo } from "../storage/fallas.js";
 import type { CatalogoRepo } from "../storage/catalogo.js";
 import type { RegistroRepo } from "../storage/registro.js";
 import type { MessageLog, SessionStore } from "../storage/sessions.js";
@@ -16,8 +18,8 @@ export interface SeaWhiteService {
   consultar(tipo: TipoRegistro, cliente: string, subcliente: string, identificador: string): Promise<Consulta>;
   documentacion(tipo: TipoRegistro, identificador: string): Promise<Documentacion>;
   descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer>;
-  /** Comprobante de VTV o seguro por dominio; null si no existe. */
-  documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<Buffer | null>;
+  /** Comprobante de VTV o seguro por dominio (con el nombre del archivo); null si no existe. */
+  documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<{ pdf: Buffer; nombreArchivo: string | null } | null>;
   cargar(tipo: TipoRegistro, registros: RegistroCarga[]): Promise<ResumenCarga>;
 }
 
@@ -36,6 +38,9 @@ export interface BotDeps {
   seawhite: SeaWhiteService;
   procesador: Procesador;
   descargarAdjunto: (url: string) => Promise<Buffer>;
+  /** Resguardo de VTV/seguro: verifica las tres patentes antes de entregar. */
+  verificador: { verificar(pdf: Buffer, tipo: "vtv" | "seguro", patente: string, nombreArchivo: string | null): Promise<ResultadoVerificacion> };
+  fallas: FallasRepo;
   lotes: LotesPendientes;
   logger: Logger;
   now: () => Date;

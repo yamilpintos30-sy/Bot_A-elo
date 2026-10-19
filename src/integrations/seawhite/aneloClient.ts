@@ -113,23 +113,17 @@ export class AneloClient {
   /**
    * PDF del comprobante de VTV o de seguro de un vehículo (sólo lectura).
    * Devuelve null si no existe (404): la API contempla que haya VTV y no
-   * seguro, o al revés.
+   * seguro, o al revés. Devuelve también el nombre del archivo, que el
+   * resguardo compara con la patente pedida antes de entregarlo.
    */
-  async documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<Buffer | null> {
+  async documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<{ pdf: Buffer; nombreArchivo: string | null } | null> {
     const res = await this.request("GET", `/api/DocumentosVehiculos/${tipo}/${encodeURIComponent(dominio)}`);
     if (res.status === 404) return null;
     if (!res.ok) throw new SeaWhiteError(`SEA WHITE respondió HTTP ${res.status} al pedir la ${tipo} de ${dominio}`, res.status);
-    // Resguardo: la API devuelve el archivo con el nombre de la patente
-    // (AAA111.pdf). Si viniera con el de OTRA patente, no se entrega: el
-    // chofer nunca debe recibir el comprobante de otro vehículo.
-    const nombre = nombreDeArchivo(res.headers.get("content-disposition"));
-    if (nombre && nombre.replace(/\.pdf$/i, "").toUpperCase() !== dominio.toUpperCase()) {
-      this.opts.logger.error({ tipo, dominio, nombre }, "RESGUARDO: SEA WHITE devolvió el comprobante de otra patente; no se entrega");
-      throw new SeaWhiteError(`El comprobante recibido (${nombre}) no corresponde a la patente ${dominio}`);
-    }
+    const nombreArchivo = nombreDeArchivo(res.headers.get("content-disposition"));
     const pdf = Buffer.from(await res.arrayBuffer());
     if (!isPdf(pdf)) throw new SeaWhiteError(`SEA WHITE no devolvió un PDF válido para la ${tipo} de ${dominio}`);
-    return pdf;
+    return { pdf, nombreArchivo };
   }
 
   /** PDF del carnet. Requiere el `id` que devuelve `consultar`. */

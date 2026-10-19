@@ -41,6 +41,9 @@ export const claudeSchema = z.object({
   EXTRACTION_MODEL: z.string().default("claude-opus-5-5"),
   /** Esfuerzo del modelo al separar carnets. Alto: un error acá termina cargado en SEA WHITE. */
   EXTRACTION_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("high"),
+  /** Modelo y esfuerzo del resguardo que lee la patente adentro de los PDF de VTV/seguro. */
+  VERIFY_MODEL: z.string().default("claude-opus-5-5"),
+  VERIFY_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("low"),
   /** Fallback automático del lado del servidor ante un "refusal" (beta; se apaga solo si la API lo rechaza). */
   CLAUDE_FALLBACKS: booleanFromEnv.default(true),
 });

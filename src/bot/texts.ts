@@ -165,6 +165,9 @@ export const CONSULTA = {
   docCaption: (doc: "vtv" | "seguro", dominio: string) => `${doc === "vtv" ? "📄 VTV" : "🛡️ Seguro"} – ${dominio}`,
   docNoEncontrado: (doc: "vtv" | "seguro", dominio: string) => `❌ No encontré ${doc === "vtv" ? "la VTV" : "el seguro"} del dominio *${dominio}*.`,
   docNoDisponible: "No pude traer el comprobante en este momento. Probá de nuevo en unos minutos.",
+  buscandoDoc: (doc: "vtv" | "seguro", dominio: string) => `🔎 Buscando ${doc === "vtv" ? "la VTV" : "el seguro"} de *${dominio}*…`,
+  /** El resguardo no lo validó: no se entrega (y queda como falla crítica en el panel). */
+  docNoVerificado: (doc: "vtv" | "seguro", dominio: string) => `Por el momento no tengo disponible ${doc === "vtv" ? "la VTV" : "el seguro"} de *${dominio}*.`,
   ofrecerOtro: (otro: "vtv" | "seguro", dominio: string) => `¿Querés también ${otro === "vtv" ? "la *VTV*" : "el *seguro*"} de *${dominio}*?`,
   dniInvalido: (error: string) => `❌ ${error}`,
   patenteInvalida: (error: string) => `❌ ${error}`,

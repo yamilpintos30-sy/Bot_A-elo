@@ -216,7 +216,7 @@ describe("consultas", () => {
         : Response.json({ mensaje: "No se encontró el documento solicitado.", tipo: "SEGURO", dominio: "AF498ZJ" }, { status: 404 }),
     );
     const c = client(f.fn, { cargaHabilitada: false });
-    expect((await c.documentoVehiculo("vtv", "AF498ZJ"))?.subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await c.documentoVehiculo("vtv", "AF498ZJ"))?.pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(await c.documentoVehiculo("seguro", "AF498ZJ")).toBeNull();
     expect(f.calls.filter((x) => x.url.includes("DocumentosVehiculos")).map((x) => [x.method, new URL(x.url).pathname])).toEqual([
       ["GET", "/api/DocumentosVehiculos/vtv/AF498ZJ"],
@@ -224,19 +224,10 @@ describe("consultas", () => {
     ]);
   });
 
-  it("RESGUARDO: nunca entrega el comprobante de otra patente", async () => {
-    const f = fakeFetch((call) =>
-      new Response(PDF, {
-        headers: {
-          "Content-Type": "application/pdf",
-          // El de la VTV viene bien; el del seguro viene con OTRA patente.
-          "Content-Disposition": call.url.includes("/vtv/") ? 'attachment; filename="AF498ZJ.pdf"' : "attachment; filename=AG536VG.pdf; filename*=UTF-8''AG536VG.pdf",
-        },
-      }),
-    );
-    const c = client(f.fn, { cargaHabilitada: false });
-    expect(await c.documentoVehiculo("vtv", "AF498ZJ")).not.toBeNull();
-    await expect(c.documentoVehiculo("seguro", "AF498ZJ")).rejects.toThrow(/no corresponde a la patente AF498ZJ/);
+  it("VTV y seguro: devuelve el nombre del archivo para el resguardo", async () => {
+    const f = fakeFetch(() => new Response(PDF, { headers: { "Content-Type": "application/pdf", "Content-Disposition": "attachment; filename=AF498ZJ.pdf; filename*=UTF-8''AF498ZJ.pdf" } }));
+    const r = await client(f.fn, { cargaHabilitada: false }).documentoVehiculo("vtv", "AF498ZJ");
+    expect(r?.nombreArchivo).toBe("AF498ZJ.pdf");
   });
 
   it("VTV y seguro: la lista blanca sólo acepta GET con tipo y dominio válidos", () => {

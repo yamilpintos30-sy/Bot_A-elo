@@ -7,10 +7,13 @@ import { ChatwootChannel } from "./channels/chatwoot/channel.js";
 import { ChatwootClient } from "./channels/chatwoot/client.js";
 import { EchoGuard } from "./channels/chatwoot/echoGuard.js";
 import { loadConfig, type AppConfig } from "./config.js";
+import { ClaudeRunner } from "./extraction/claudeRunner.js";
 import { ProcesadorCarnets } from "./extraction/procesarCarnets.js";
+import { VerificadorComprobantes } from "./extraction/verificadorComprobantes.js";
 import { AneloClient } from "./integrations/seawhite/aneloClient.js";
 import { SupabaseCargadores } from "./storage/cargadores.js";
 import { SupabaseCatalogo } from "./storage/catalogo.js";
+import { SupabaseFallas } from "./storage/fallas.js";
 import { SupabaseRegistro } from "./storage/registro.js";
 import { SupabaseMessageLog, SupabaseSessions } from "./storage/sessions.js";
 import { createSupabase } from "./storage/supabase.js";
@@ -50,6 +53,9 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     logger,
   });
 
+  // Un solo cliente de Claude para separar carnets y verificar comprobantes.
+  const claude = new ClaudeRunner(config.ANTHROPIC_API_KEY, logger, config.CLAUDE_FALLBACKS);
+
   const deps: BotDeps = {
     botName: config.BOT_NAME,
     timezone: config.TIMEZONE,
@@ -59,8 +65,10 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     sessions: new SupabaseSessions(supabase),
     log: new SupabaseMessageLog(supabase, logger),
     seawhite,
-    procesador: new ProcesadorCarnets(config, logger),
+    procesador: new ProcesadorCarnets(config, logger, claude),
     descargarAdjunto: (url) => chatwoot.downloadAttachment(url),
+    verificador: new VerificadorComprobantes(claude, { model: config.VERIFY_MODEL, effort: config.VERIFY_EFFORT }, logger),
+    fallas: new SupabaseFallas(supabase, logger),
     lotes: new LotesPendientes(),
     logger,
     now: () => new Date(),

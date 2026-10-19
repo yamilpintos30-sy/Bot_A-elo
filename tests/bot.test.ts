@@ -12,6 +12,8 @@ import type { ProcesamientoResultado } from "../src/extraction/procesarCarnets.j
 import type { CarnetListo } from "../src/extraction/review.js";
 import type { Consulta, RegistroCarga, ResumenCarga, TipoRegistro } from "../src/integrations/seawhite/types.js";
 import { MemoryCargadores } from "../src/storage/cargadores.js";
+import { MemoryFallas } from "../src/storage/fallas.js";
+import type { ResultadoVerificacion } from "../src/extraction/verificadorComprobantes.js";
 import { MemoryCatalogo, type Cliente } from "../src/storage/catalogo.js";
 import { MemoryRegistro } from "../src/storage/registro.js";
 import { MemorySessions, NoopMessageLog } from "../src/storage/sessions.js";
@@ -70,8 +72,9 @@ class FakeSeaWhite implements SeaWhiteService {
     ["seguro:AF498ZJ", Buffer.concat([PDF, Buffer.from("SEGURO AF498ZJ")])],
     ["vtv:AG536VG", Buffer.concat([PDF, Buffer.from("VTV AG536VG")])],
   ]);
-  async documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<Buffer | null> {
-    return this.docs.get(`${tipo}:${dominio}`) ?? null;
+  async documentoVehiculo(tipo: "vtv" | "seguro", dominio: string) {
+    const pdf = this.docs.get(`${tipo}:${dominio}`);
+    return pdf ? { pdf, nombreArchivo: `${dominio}.pdf` } : null;
   }
   async descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer> {
     const d = [...this.datos.entries()].find(([k, v]) => k.startsWith(tipo) && v.id === id);
@@ -90,7 +93,7 @@ function resultado(aceptados: CarnetListo[], rechazados: ProcesamientoResultado[
 
 type ProcesarFn = (pdf: Buffer, f: string, onEtapa?: (e: "separando" | "verificando") => Promise<void> | void) => Promise<ProcesamientoResultado>;
 
-function setup(opts: { procesar?: ProcesarFn } = {}) {
+function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVerificacion> } = {}) {
   const sent: Array<{ conversationId: string; out: Outbound }> = [];
   const seawhite = new FakeSeaWhite();
   const registro = new MemoryRegistro();
@@ -100,6 +103,7 @@ function setup(opts: { procesar?: ProcesarFn } = {}) {
     return resultado([carnet("33615617", "18-10-2026"), carnet("29642599", "31-10-2026", { observaciones: "Inhabilitado para conducir" })]);
   };
   const procesar = vi.fn(opts.procesar ?? porDefecto);
+  const fallas = new MemoryFallas();
   const deps: BotDeps = {
     botName: "Javier",
     timezone: "America/Argentina/Buenos_Aires",
@@ -111,6 +115,18 @@ function setup(opts: { procesar?: ProcesarFn } = {}) {
     seawhite,
     procesador: { procesar },
     descargarAdjunto: vi.fn(async () => PDF),
+    // Resguardo falso: aprueba salvo que el test pida otra cosa.
+    verificador: {
+      verificar: vi.fn(async (_pdf: Buffer, _t: "vtv" | "seguro", patente: string, nombreArchivo: string | null) => ({
+        ok: true,
+        patentePedida: patente,
+        patenteArchivo: nombreArchivo?.replace(/\.pdf$/, "") ?? null,
+        patentesEnPdf: [patente],
+        tipoDetectado: _t,
+        ...opts.verificacion,
+      })),
+    },
+    fallas,
     lotes: new LotesPendientes(),
     logger,
     now: () => HOY,
@@ -123,7 +139,7 @@ function setup(opts: { procesar?: ProcesarFn } = {}) {
     await engine.handle(msg);
     return sent.map((s) => s.out);
   };
-  return { engine, deps, seawhite, registro, procesar, say, sent };
+  return { engine, deps, seawhite, registro, procesar, say, sent, fallas };
 }
 
 const pdfAdj = (name = "carnets.pdf"): IncomingAttachment => ({ url: `https://chatwoot/${name}`, fileType: "file", contentType: "application/pdf", fileName: name });
@@ -389,6 +405,18 @@ describe("chofer", () => {
     expect(buttons(outs)).toEqual(["📄 Sí, la VTV", "Menú 😊", "Eso es todo, gracias"]);
     outs = await say(CHOFER, "📄 Sí, la VTV");
     expect(outs.find((o) => o.kind === "file")).toMatchObject({ filename: "VTV_AG536VG.pdf" });
+  });
+
+  it("RESGUARDO: si las patentes no coinciden NO manda el PDF, dice que no está disponible y registra falla crítica", async () => {
+    const { say, fallas } = setup({ verificacion: { ok: false, motivo: "Adentro del PDF figura AG536VG, no AF498ZJ.", patentesEnPdf: ["AG536VG"] } });
+    await say(CHOFER, "hola");
+    await say(CHOFER, "📄 VTV");
+    const outs = await say(CHOFER, "AF498ZJ");
+    expect(outs.some((o) => o.kind === "file")).toBe(false);
+    expect(texts(outs)).toMatch(/Por el momento no tengo disponible la VTV de \*AF498ZJ\*/);
+    expect(fallas.fallas).toHaveLength(1);
+    expect(fallas.fallas[0]).toMatchObject({ tipo: "comprobante_no_coincide", severidad: "critica", dominio: "AF498ZJ", telefono: CHOFER });
+    expect(fallas.fallas[0]!.descripcion).toMatch(/VTV de AF498ZJ NO entregado: Adentro del PDF figura AG536VG/);
   });
 
   it("VTV con una patente inválida: avisa", async () => {
