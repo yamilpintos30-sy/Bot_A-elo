@@ -16,6 +16,8 @@ export interface SeaWhiteService {
   consultar(tipo: TipoRegistro, cliente: string, subcliente: string, identificador: string): Promise<Consulta>;
   documentacion(tipo: TipoRegistro, identificador: string): Promise<Documentacion>;
   descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer>;
+  /** Comprobante de VTV o seguro por dominio; null si no existe. */
+  documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<Buffer | null>;
   cargar(tipo: TipoRegistro, registros: RegistroCarga[]): Promise<ResumenCarga>;
 }
 

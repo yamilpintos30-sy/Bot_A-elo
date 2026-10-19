@@ -77,8 +77,15 @@ export interface ConsultaState {
    */
   clienteCodigo?: string;
   plantaCodigo?: string;
-  /** Qué eligió consultar: espera un DNI (chofer) o una patente (dominio). */
-  esperando?: "chofer" | "dominio";
+  /**
+   * Opción elegida en el menú principal:
+   *   chofer / dominio -> credencial de ingreso (con cliente y subcliente) por DNI o patente
+   *   vtv / seguro     -> comprobante del vehículo por patente (sin cliente)
+   */
+  modo?: "chofer" | "dominio" | "vtv" | "seguro";
+  /** VTV/seguro: dominio consultado y si ya se ofreció el otro comprobante. */
+  ultimoDominio?: string;
+  otroOfrecido?: boolean;
   /** DNI o patente que mandó ANTES de decir la planta: se consulta apenas la elija. */
   pendiente?: { tipo: "chofer" | "dominio"; identificador: string };
   /** Carnet de la última consulta (su ID de SEA WHITE se usa para mandar el PDF). */

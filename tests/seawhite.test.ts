@@ -209,6 +209,28 @@ describe("consultas", () => {
     expect(r).toEqual({ found: false, tipo: "chofer", identificador: "30123456", mensaje: "No se encontró el vencimiento del chofer." });
   });
 
+  it("VTV y seguro: devuelve el PDF, o null si no existe (404)", async () => {
+    const f = fakeFetch((call) =>
+      call.url.endsWith("/vtv/AF498ZJ")
+        ? new Response(PDF, { headers: { "Content-Type": "application/pdf" } })
+        : Response.json({ mensaje: "No se encontró el documento solicitado.", tipo: "SEGURO", dominio: "AF498ZJ" }, { status: 404 }),
+    );
+    const c = client(f.fn, { cargaHabilitada: false });
+    expect((await c.documentoVehiculo("vtv", "AF498ZJ"))?.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(await c.documentoVehiculo("seguro", "AF498ZJ")).toBeNull();
+    expect(f.calls.filter((x) => x.url.includes("DocumentosVehiculos")).map((x) => [x.method, new URL(x.url).pathname])).toEqual([
+      ["GET", "/api/DocumentosVehiculos/vtv/AF498ZJ"],
+      ["GET", "/api/DocumentosVehiculos/seguro/AF498ZJ"],
+    ]);
+  });
+
+  it("VTV y seguro: la lista blanca sólo acepta GET con tipo y dominio válidos", () => {
+    expect(assertAllowedEndpoint("GET", "/api/DocumentosVehiculos/vtv/AF498ZJ").writes).toBe(false);
+    expect(() => assertAllowedEndpoint("POST", "/api/DocumentosVehiculos/vtv/AF498ZJ")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/DocumentosVehiculos/otro/AF498ZJ")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/DocumentosVehiculos/vtv/AF498ZJ.pdf")).toThrow(/BLOQUEADO/);
+  });
+
   it("las consultas funcionan aunque la carga esté deshabilitada", async () => {
     const f = fakeFetch(() => new Response(PDF, { headers: { "Content-Type": "application/pdf" } }));
     const pdf = await client(f.fn, { cargaHabilitada: false }).descargarPdf("dominio", 5);

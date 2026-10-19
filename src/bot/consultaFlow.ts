@@ -1,18 +1,18 @@
 /**
  * Flujo de CONSULTA (choferes y cualquier número que no sea cargador).
  *
- *   saludo cordial con la imagen del bot
- *   -> "¿A qué planta vas?" -> cliente y subcliente, cotejados contra la tabla
- *   -> [Chofer] [Vehículo] -> DNI o patente
- *   -> vencimientos EN ESE cliente y subcliente (consulta GET a SEA WHITE, de la
- *      que se toma el ID del carnet) + licencia/ART/F.931 (o seguro/VTV)
- *   -> "¿Querés que te pase el carnet?" -> con ese ID se manda el PDF
- *   -> [Menú 😊] (de cero: pide cliente y subcliente)
- *      [🔎 Consulta] (otra consulta en el MISMO cliente y subcliente)
- *      [Eso es todo, gracias]
+ *   saludo cordial con la imagen del bot -> MENÚ PRINCIPAL:
+ *     🪪 Por DNI      -> cliente y subcliente -> DNI     -> credencial + licencia/ART/F.931 -> ¿carnet?
+ *     🚛 Por dominio  -> cliente y subcliente -> patente -> credencial + seguro/VTV        -> ¿carnet?
+ *     📄 VTV          -> patente -> PDF de la VTV    -> ¿querés también el seguro?
+ *     🛡️ Seguro       -> patente -> PDF del seguro   -> ¿querés también la VTV?
  *
- * El cliente y el subcliente van primero porque un mismo DNI o patente puede
- * estar cargado en varias plantas, y la API consulta por cliente + subcliente.
+ *   Al terminar: [Menú 😊] borra DNI, dominio, cliente y subcliente (para
+ *   consultar otro), [🔎 Consulta] repite por DNI o dominio en la MISMA planta,
+ *   [Eso es todo, gracias] cierra.
+ *
+ * La credencial va por cliente + subcliente porque un mismo DNI o patente
+ * puede estar cargado en varias plantas. VTV y seguro van sólo por dominio.
  */
 import { findDniInText, findPatenteInText, normalizeDni, normalizePatente } from "../domain/validators.js";
 import type { Documentacion, TipoRegistro } from "../integrations/seawhite/types.js";
@@ -20,23 +20,39 @@ import type { Cliente } from "../storage/catalogo.js";
 import { todayInTimeZone } from "../utils/dates.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto, resolverCliente, resolverPlanta } from "./catalogo.js";
-import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
+import { BOTON_FIN, BOTON_MENU, PIE } from "./comandos.js";
 import type { BotDeps, Emit } from "./deps.js";
 import { CONSULTA, respuestaConsulta, type LineaPlanta } from "./texts.js";
 import type { ButtonSpec, ConsultaState, IncomingMessage, Session } from "./types.js";
 
-const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Chofer", payload: "q:chofer" }, { title: "🚛 Vehículo", payload: "q:dominio" }, BOTON_FIN];
+type Modo = NonNullable<ConsultaState["modo"]>;
+type Doc = "vtv" | "seguro";
+
+/** Menú principal: 4 opciones + cerrar (WhatsApp lo muestra como lista). */
+const MENU_PRINCIPAL: ButtonSpec[] = [
+  { title: "🪪 Por DNI", payload: "m:chofer" },
+  { title: "🚛 Por dominio", payload: "m:dominio" },
+  { title: "📄 VTV", payload: "m:vtv" },
+  { title: "🛡️ Seguro", payload: "m:seguro" },
+  BOTON_FIN,
+];
+/** [🔎 Consulta]: otra credencial en la misma planta. */
+const MENU_CREDENCIAL: ButtonSpec[] = [MENU_PRINCIPAL[0]!, MENU_PRINCIPAL[1]!, BOTON_FIN];
 const BOTON_CONSULTA: ButtonSpec = { title: "🔎 Consulta", payload: "consulta" };
-/** Cierre de cada consulta: de cero, otra en la misma planta, o terminar. */
+/** Cierre de una consulta de credencial: de cero, otra en la misma planta, o terminar. */
 const FIN_CONSULTA: ButtonSpec[] = [BOTON_MENU, BOTON_CONSULTA, BOTON_FIN];
 
-/** "chofer", "dni", "vehiculo", "patente", "dominio" escritos en vez de tocar el botón. */
-function opcionEscrita(texto: string): TipoRegistro | undefined {
+/** Opciones escritas en vez de tocar el botón. */
+function opcionEscrita(texto: string): Modo | undefined {
   const t = normalizeText(texto);
-  if (/^(chofer|choferes|dni|persona)$/.test(t)) return "chofer";
-  if (/^(vehiculo|vehiculos|camion|patente|dominio|unidad)$/.test(t)) return "dominio";
+  if (/^(por dni|dni|chofer|choferes|persona)$/.test(t)) return "chofer";
+  if (/^(por dominio|dominio|patente|vehiculo|camion|unidad)$/.test(t)) return "dominio";
+  if (/^(vtv|consulta vtv)$/.test(t)) return "vtv";
+  if (/^(seguro|consulta seguro|poliza)$/.test(t)) return "seguro";
   return undefined;
 }
+
+const otroDoc = (d: Doc): Doc => (d === "vtv" ? "seguro" : "vtv");
 
 export class ConsultaFlow {
   constructor(private readonly deps: BotDeps) {}
@@ -44,41 +60,134 @@ export class ConsultaFlow {
   async handle(session: Session, msg: IncomingMessage, payload: string | undefined, emit: Emit): Promise<void> {
     const st: ConsultaState = (session.consulta ??= { saludado: false });
     const clientes = await this.deps.catalogo.listar();
-
-    if (!st.saludado) {
+    const primerMensaje = !st.saludado;
+    if (primerMensaje) {
       st.saludado = true;
       await emit({ kind: "image", caption: CONSULTA.saludo(this.deps.botName) });
     }
 
-    // --- Botones globales del flujo ---
+    // --- Botones y comandos ---
     if (payload === "menu") {
-      // De cero: se olvida el cliente y el subcliente.
+      // De cero: se olvidan DNI, dominio, cliente y subcliente.
       session.consulta = { saludado: true };
-      return this.pedirCliente(clientes, emit);
+      return this.menuPrincipal(emit);
     }
     if (payload === "consulta") {
-      st.esperando = undefined;
+      // Otra credencial en la MISMA planta.
+      st.modo = undefined;
       st.ultimos = undefined;
-      return this.conDestino(st, clientes, emit) ?? this.pedirCliente(clientes, emit);
+      const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+      if (cliente && planta) return emit({ kind: "buttons", text: CONSULTA.destinoOk(etiqueta(cliente, planta)), buttons: MENU_CREDENCIAL });
+      return this.menuPrincipal(emit);
     }
-    if (payload === "carnet") return this.enviarCarnet(st, 0, emit);
-    if (payload?.startsWith("carnet:")) return this.enviarCarnet(st, Number(payload.slice(7)), emit);
-    if (payload === "nocarnet") return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: FIN_CONSULTA });
+    if (payload === "carnet") return this.enviarCarnet(st, emit);
+    if (payload === "nocarnet") return this.algoMas(emit, FIN_CONSULTA);
+    if (payload === "otrodoc") return this.enviarOtroDoc(st, emit);
+
+    const elegido = payload?.startsWith("m:") ? (payload.slice(2) as Modo) : opcionEscrita(msg.text);
+    if (elegido) return this.elegir(st, elegido, clientes, emit);
 
     // Este número no recibe archivos (sólo los cargadores).
     if (msg.attachments.length > 0) {
       await emit({ kind: "text", text: CONSULTA.sinArchivos, sinPie: true });
-      if (!msg.text.trim()) return this.siguientePaso(st, clientes, emit);
+      if (!msg.text.trim()) return this.retomar(st, clientes, emit);
     }
 
-    // --- 1) Cliente y subcliente (siempre primero) ---
+    // --- Sin opción elegida: se deduce lo que se pueda o se muestra el menú ---
+    if (!st.modo) {
+      const dni = findDniInText(msg.text);
+      const patente = dni ? undefined : findPatenteInText(msg.text);
+      if (dni || patente) {
+        // DNI o patente escritos de entrada: credencial (se piden cliente y subcliente si faltan).
+        st.modo = dni ? "chofer" : "dominio";
+        st.pendiente = { tipo: st.modo, identificador: (dni ?? patente)! };
+      } else {
+        // "¿puedo entrar a total planta 1?": se recuerda la planta para después.
+        this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
+        return this.menuPrincipal(emit);
+      }
+    }
+
+    if (st.modo === "vtv" || st.modo === "seguro") return this.pasoDocumento(st, st.modo, msg.text, emit);
+    return this.pasoCredencial(st, st.modo, msg, payload, clientes, emit);
+  }
+
+  // --- Menú y elección -----------------------------------------------------------
+
+  private menuPrincipal(emit: Emit): Promise<void> {
+    return emit({ kind: "buttons", text: CONSULTA.menuPrincipal, buttons: MENU_PRINCIPAL });
+  }
+
+  private async elegir(st: ConsultaState, modo: Modo, clientes: Cliente[], emit: Emit): Promise<void> {
+    st.modo = modo;
+    st.pendiente = undefined;
+    st.ultimos = undefined;
+    st.ultimoDominio = undefined;
+    st.otroOfrecido = undefined;
+    if (modo === "vtv" || modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(modo) });
+    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    if (cliente && planta) return this.pedirIdentificador(modo, etiqueta(cliente, planta), emit);
+    if (cliente) return this.pedirPlanta(cliente, emit);
+    return this.pedirCliente(clientes, emit);
+  }
+
+  /** Tras un aviso (p. ej. "no se reciben archivos"), retoma el paso en el que estaba. */
+  private retomar(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> {
+    if (!st.modo) return this.menuPrincipal(emit);
+    if (st.modo === "vtv" || st.modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(st.modo) });
+    return this.elegir(st, st.modo, clientes, emit);
+  }
+
+  // --- VTV y seguro (sólo por dominio) ----------------------------------------------
+
+  private async pasoDocumento(st: ConsultaState, doc: Doc, texto: string, emit: Emit): Promise<void> {
+    const patente = findPatenteInText(texto);
+    if (!patente) {
+      if (texto.trim()) return emit({ kind: "text", text: CONSULTA.patenteInvalida(normalizePatente(texto).error ?? "Patente inválida.") });
+      return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(doc) });
+    }
+    st.ultimoDominio = patente;
+    st.otroOfrecido = false;
+    await this.enviarDoc(doc, patente, emit);
+    // Se ofrece el otro comprobante del mismo vehículo.
+    st.otroOfrecido = true;
+    const otro = otroDoc(doc);
+    return emit({
+      kind: "buttons",
+      text: CONSULTA.ofrecerOtro(otro, patente),
+      buttons: [{ title: otro === "vtv" ? "📄 Sí, la VTV" : "🛡️ Sí, el seguro", payload: "otrodoc" }, BOTON_MENU, BOTON_FIN],
+    });
+  }
+
+  private async enviarOtroDoc(st: ConsultaState, emit: Emit): Promise<void> {
+    const doc = st.modo === "vtv" || st.modo === "seguro" ? otroDoc(st.modo) : undefined;
+    if (!doc || !st.ultimoDominio) return this.menuPrincipal(emit);
+    await this.enviarDoc(doc, st.ultimoDominio, emit);
+    return this.algoMas(emit, PIE);
+  }
+
+  private async enviarDoc(doc: Doc, dominio: string, emit: Emit): Promise<void> {
+    try {
+      const pdf = await this.deps.seawhite.documentoVehiculo(doc, dominio);
+      if (!pdf) return emit({ kind: "text", text: CONSULTA.docNoEncontrado(doc, dominio), sinPie: true });
+      // El canal espera que WhatsApp entregue el PDF antes de mandar lo siguiente.
+      return emit({ kind: "file", filename: `${doc.toUpperCase()}_${dominio}.pdf`, data: pdf, caption: CONSULTA.docCaption(doc, dominio) });
+    } catch (err) {
+      this.deps.logger.error({ err }, "No se pudo traer el comprobante del vehículo");
+      return emit({ kind: "text", text: CONSULTA.docNoDisponible, sinPie: true });
+    }
+  }
+
+  // --- Credencial de ingreso (por cliente y subcliente) -------------------------------
+
+  private async pasoCredencial(st: ConsultaState, modo: TipoRegistro, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
     const cambio = this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
     const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+
     if (!cliente || !planta) {
       // Mandó el DNI o la patente antes de la planta: se recuerda y se consulta después.
-      const dniAntes = findDniInText(msg.text);
-      const patenteAntes = dniAntes ? undefined : findPatenteInText(msg.text);
-      if (dniAntes || patenteAntes) st.pendiente = { tipo: dniAntes ? "chofer" : "dominio", identificador: (dniAntes ?? patenteAntes)! };
+      const id = modo === "chofer" ? findDniInText(msg.text) : findPatenteInText(msg.text);
+      if (id) st.pendiente = { tipo: modo, identificador: id };
     }
     if (!cliente) {
       const escribioOtraCosa = msg.text.trim() && !cambio.reconocio && !st.pendiente && !this.esSaludo(msg.text);
@@ -93,7 +202,8 @@ export class ConsultaFlow {
       }
       if (!st.plantaCodigo) return this.pedirPlanta(cliente, emit);
     }
-    const destino = etiqueta(...this.par(clientes, st));
+    const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    const destino = etiqueta(b.cliente, b.planta);
 
     // Había un DNI o una patente esperando a que eligiera la planta.
     if (st.pendiente) {
@@ -101,43 +211,24 @@ export class ConsultaFlow {
       st.pendiente = undefined;
       return this.consultar(st, tipo, identificador, destino, emit);
     }
+    const id = modo === "chofer" ? findDniInText(msg.text) : findPatenteInText(msg.text);
+    if (id) return this.consultar(st, modo, id, destino, emit);
 
-    // --- 2) Chofer o vehículo ---
-    const opcion = payload?.startsWith("q:") ? (payload.slice(2) as TipoRegistro) : opcionEscrita(msg.text);
-    if (opcion) {
-      st.esperando = opcion;
-      return emit({ kind: "text", text: opcion === "chofer" ? CONSULTA.pedirDni : CONSULTA.pedirPatente });
-    }
-
-    // --- 3) DNI o patente -> consulta en el cliente y subcliente declarados ---
-    const dni = st.esperando !== "dominio" ? findDniInText(msg.text) : undefined;
-    const patente = !dni && st.esperando !== "chofer" ? findPatenteInText(msg.text) : undefined;
-    if (dni || patente) {
-      st.esperando = undefined;
-      return this.consultar(st, dni ? "chofer" : "dominio", (dni ?? patente)!, destino, emit);
-    }
-
-    // Acaba de elegir (o cambiar) la planta: se ofrece qué consultar.
-    if (cambio.reconocio) return emit({ kind: "buttons", text: CONSULTA.destinoOk(destino), buttons: MENU_TIPO });
-    // Esperaba un DNI o una patente y lo que llegó no lo es.
-    if (st.esperando === "chofer" && msg.text.trim()) return emit({ kind: "text", text: CONSULTA.dniInvalido(normalizeDni(msg.text).error ?? "DNI inválido.") });
-    if (st.esperando === "dominio" && msg.text.trim()) return emit({ kind: "text", text: CONSULTA.patenteInvalida(normalizePatente(msg.text).error ?? "Patente inválida.") });
-    return emit({ kind: "buttons", text: CONSULTA.destinoOk(destino), buttons: MENU_TIPO });
+    // Acaba de elegir la planta: se pide el DNI o la patente.
+    if (cambio.reconocio || !msg.text.trim()) return this.pedirIdentificador(modo, destino, emit);
+    if (modo === "chofer") return emit({ kind: "text", text: CONSULTA.dniInvalido(normalizeDni(msg.text).error ?? "DNI inválido.") });
+    return emit({ kind: "text", text: CONSULTA.patenteInvalida(normalizePatente(msg.text).error ?? "Patente inválida.") });
   }
 
-  private par(clientes: Cliente[], st: ConsultaState) {
-    const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    return [b.cliente, b.planta] as const;
+  private pedirIdentificador(modo: TipoRegistro, destino: string, emit: Emit): Promise<void> {
+    return emit({ kind: "text", text: modo === "chofer" ? CONSULTA.pedirDniPara(destino) : CONSULTA.pedirPatentePara(destino) });
   }
 
   private esSaludo(texto: string): boolean {
     return /^(hola+|buenas|buen dia|buenos dias|buenas tardes|buenas noches|hey|que tal)\b/.test(normalizeText(texto));
   }
 
-  /**
-   * Toma cliente/subcliente del botón o del texto (se puede cambiar en
-   * cualquier momento escribiendo otro: "y en vista planta 1?").
-   */
+  /** Toma cliente/subcliente del botón o del texto ("total planta 1", "y en vista?"). */
   private aplicarClienteSubcliente(st: ConsultaState, texto: string, payload: string | undefined, clientes: Cliente[]): { reconocio: boolean; subclienteInvalido: boolean } {
     if (payload?.startsWith("cli:")) {
       st.clienteCodigo = payload.slice(4);
@@ -163,27 +254,10 @@ export class ConsultaFlow {
     return { reconocio: Boolean(cliente || planta), subclienteInvalido };
   }
 
-  /** Si ya hay cliente y subcliente, ofrece [Chofer] [Vehículo]; si no, undefined. */
-  private conDestino(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> | undefined {
-    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    if (!cliente || !planta) return undefined;
-    return emit({ kind: "buttons", text: CONSULTA.destinoOk(etiqueta(cliente, planta)), buttons: MENU_TIPO });
-  }
-
-  /** Tras un aviso (p. ej. "no se reciben archivos"), retoma el paso en el que estaba. */
-  private siguientePaso(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> {
-    if (st.esperando) return emit({ kind: "text", text: st.esperando === "chofer" ? CONSULTA.pedirDni : CONSULTA.pedirPatente });
-    return this.conDestino(st, clientes, emit) ?? this.pedirCliente(clientes, emit);
-  }
-
   private pedirCliente(clientes: Cliente[], emit: Emit): Promise<void> {
     // Con pocos clientes, también se ofrecen como botones.
     if (clientes.length > 0 && clientes.length <= 3) {
-      return emit({
-        kind: "buttons",
-        text: CONSULTA.pedirClienteSubcliente,
-        buttons: clientes.map((c) => ({ title: buttonTitle(nombreCorto(c.nombre)), payload: `cli:${c.codigo}` })),
-      });
+      return emit({ kind: "buttons", text: CONSULTA.pedirClienteSubcliente, buttons: clientes.map((c) => ({ title: buttonTitle(nombreCorto(c.nombre)), payload: `cli:${c.codigo}` })) });
     }
     return emit({ kind: "text", text: CONSULTA.pedirClienteSubcliente });
   }
@@ -223,7 +297,6 @@ export class ConsultaFlow {
       const reg = (await this.deps.registro.buscarCarnets(tipo, identificador)).find((r) => r.clienteCodigo === clienteCodigo && r.plantaCodigo === plantaCodigo);
       nombre = reg?.apellidoNombre ?? null;
       if (linea && reg?.observaciones) linea.observaciones = reg.observaciones;
-      // Sin respuesta de SEA WHITE: se muestra lo registrado, avisando.
       if (fallo && reg) linea = { destino, vencimiento: reg.vencimiento, enSeaWhite: true, observaciones: reg.observaciones };
     } catch (err) {
       this.deps.logger.warn({ err }, "No se pudo leer el registro de carnets");
@@ -237,36 +310,30 @@ export class ConsultaFlow {
     }
     nombre ??= documentacion?.found && documentacion.tipo === "chofer" ? documentacion.nombre : null;
 
-    const texto = respuestaConsulta({
-      tipo,
-      identificador,
-      nombre,
-      plantas: linea ? [linea] : [],
-      sinCredencialEn: linea ? undefined : destino,
-      documentacion,
-      hoy,
-    });
+    const texto = respuestaConsulta({ tipo, identificador, nombre, plantas: linea ? [linea] : [], sinCredencialEn: linea ? undefined : destino, documentacion, hoy });
 
-    if (seawhiteId === null) {
-      return emit({ kind: "buttons", text: `${texto}\n\n${CONSULTA.algoMas}`, buttons: FIN_CONSULTA });
-    }
+    if (seawhiteId === null) return emit({ kind: "buttons", text: `${texto}\n\n${CONSULTA.algoMas}`, buttons: FIN_CONSULTA });
     st.ultimos = [{ tipo, identificador, clienteCodigo, plantaCodigo, etiqueta: destino, seawhiteId }];
     await emit({ kind: "text", text: texto, sinPie: true });
     return emit({ kind: "buttons", text: CONSULTA.preguntaCarnet, buttons: [{ title: "📄 Sí, pasámelo", payload: "carnet" }, { title: "No, gracias", payload: "nocarnet" }] });
   }
 
   /** Manda el carnet de la ÚLTIMA consulta, con el ID que vino en ella (nunca otro DNI). */
-  private async enviarCarnet(st: ConsultaState, indice: number, emit: Emit): Promise<void> {
-    const c = st.ultimos?.[indice];
-    if (!c || c.seawhiteId === null) return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: FIN_CONSULTA });
+  private async enviarCarnet(st: ConsultaState, emit: Emit): Promise<void> {
+    const c = st.ultimos?.[0];
+    if (!c || c.seawhiteId === null) return this.algoMas(emit, FIN_CONSULTA);
     try {
       const pdf = await this.deps.seawhite.descargarPdf(c.tipo, c.seawhiteId);
-      // El canal espera que WhatsApp entregue el PDF antes de mandar lo siguiente.
       await emit({ kind: "file", filename: `${c.identificador}.pdf`, data: pdf, caption: `📄 Carnet – ${c.etiqueta}` });
     } catch (err) {
       this.deps.logger.error({ err }, "No se pudo traer el PDF del carnet");
       await emit({ kind: "text", text: CONSULTA.carnetNoDisponible, sinPie: true });
     }
-    return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: FIN_CONSULTA });
+    return this.algoMas(emit, FIN_CONSULTA);
+  }
+
+  /** "¿Necesitás algo más? Para consultar otro DNI o dominio, tocá Menú." */
+  private algoMas(emit: Emit, botones: ButtonSpec[]): Promise<void> {
+    return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: botones });
   }
 }

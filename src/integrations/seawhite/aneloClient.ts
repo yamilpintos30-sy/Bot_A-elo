@@ -110,6 +110,20 @@ export class AneloClient {
     return { found: true, tipo, seguro: b.data.Vto_Seguro ?? null, vtv: b.data.Vto_Vtv ?? null };
   }
 
+  /**
+   * PDF del comprobante de VTV o de seguro de un vehículo (sólo lectura).
+   * Devuelve null si no existe (404): la API contempla que haya VTV y no
+   * seguro, o al revés.
+   */
+  async documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<Buffer | null> {
+    const res = await this.request("GET", `/api/DocumentosVehiculos/${tipo}/${encodeURIComponent(dominio)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new SeaWhiteError(`SEA WHITE respondió HTTP ${res.status} al pedir la ${tipo} de ${dominio}`, res.status);
+    const pdf = Buffer.from(await res.arrayBuffer());
+    if (!isPdf(pdf)) throw new SeaWhiteError(`SEA WHITE no devolvió un PDF válido para la ${tipo} de ${dominio}`);
+    return pdf;
+  }
+
   /** PDF del carnet. Requiere el `id` que devuelve `consultar`. */
   async descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer> {
     const res = await this.request("GET", `/api/VencimientosAnelo/${tipo}/${this.opts.servidor}/${id}/pdf`);

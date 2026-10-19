@@ -72,12 +72,19 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 
 **Choferes** (cualquier otro número):
 1. Saludo cordial con la imagen de Javier (`WELCOME_IMAGE`, por defecto `assets/javier.jpg`; sin imagen, sale solo texto).
-2. **Primero cliente y subcliente** ("¿A qué planta vas?"), cotejados contra la tabla: un mismo DNI o patente puede estar cargado en varias plantas, y la API consulta por cliente + subcliente.
-3. **[👤 Chofer] [🚛 Vehículo]**: pide el DNI o la patente. Si los mandó antes de decir la planta, los recuerda y los consulta apenas la elige.
-4. Vencimiento en **esa** planta (GET a SEA WHITE, del que se toma el **ID del carnet**), más licencia, ART y F.931 (o seguro y VTV).
-5. "¿Querés que te pase el carnet?" → con ese ID trae el PDF y lo manda. El bot espera que WhatsApp lo entregue antes de seguir.
-6. Al terminar: **[Menú 😊]** vuelve a pedir cliente y subcliente; **[🔎 Consulta]** hace otra consulta en el mismo cliente y subcliente; **[Eso es todo, gracias]** cierra.
-7. Si manda un archivo, se le avisa que el número es solo para consultas.
+2. **Menú principal:** **[🪪 Por DNI] [🚛 Por dominio] [📄 VTV] [🛡️ Seguro] [Eso es todo, gracias]**. Con más de 3 opciones, WhatsApp lo muestra como lista.
+3. **Por DNI y por dominio (credencial de ingreso):**
+   - Se pide **cliente y subcliente** primero, porque un DNI o una patente puede estar en varias plantas. Después, el DNI o la patente.
+   - Muestra el vencimiento en esa planta (GET a SEA WHITE, del que se toma el **ID del carnet**), más licencia, ART y F.931, o seguro y VTV.
+   - Pregunta "¿Querés que te pase el carnet?" y con ese ID manda el PDF.
+4. **VTV y seguro:**
+   - Piden solo la patente y mandan el PDF (`GET /api/DocumentosVehiculos/{vtv|seguro}/{dominio}`).
+   - Después ofrecen el otro comprobante del mismo vehículo.
+5. **Para terminar:**
+   - **[Menú 😊]** borra el DNI, el dominio, el cliente y el subcliente para consultar otro. El bot lo aclara en el "¿Necesitás algo más?".
+   - **[🔎 Consulta]** repite por DNI o dominio en la misma planta.
+   - **[Eso es todo, gracias]** cierra.
+6. El bot espera que WhatsApp entregue cada PDF antes de mandar el mensaje siguiente. Si alguien manda un archivo, se le avisa que el número es solo para consultas.
 
 ## Comandos
 
