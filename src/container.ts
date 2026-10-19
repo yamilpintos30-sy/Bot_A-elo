@@ -74,7 +74,7 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     now: () => new Date(),
   };
 
-  const channel = new ChatwootChannel(chatwoot, logger, config.WELCOME_IMAGE ? path.resolve(process.cwd(), config.WELCOME_IMAGE) : undefined);
+  const channel = new ChatwootChannel(chatwoot, logger, config.WELCOME_IMAGE ? path.resolve(process.cwd(), config.WELCOME_IMAGE) : undefined, config.WELCOME_IMAGE_DELAY_MS);
   const engine = new BotEngine(deps, channel, config.HANDOFF_SILENCE_MINUTES);
   return { config, logger, supabase, seawhite, echo, engine, deps };
 }

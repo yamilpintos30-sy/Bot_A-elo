@@ -144,7 +144,9 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
 // --- Choferes --------------------------------------------------------------------
 
 export const CONSULTA = {
-  saludo: (bot: string) => `👋 ¡Hola! Soy *${bot}*, el asistente de SEA WHITE para el ingreso a planta.`,
+  /** Mismo saludo que Enri (con el nombre si se identificó el teléfono). */
+  saludo: (bot: string, nombre?: string | null) =>
+    nombre ? `¡Hola, ${nombre}! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*` : `¡Hola! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*`,
   pedirClienteSubcliente: "¿A qué planta vas a ingresar? Escribí *cliente y subcliente*.\nEjemplo: *Total Planta 1*",
   elegirPlanta: (cliente: string) => `¿Qué subcliente (planta) de ${cliente}?`,
   clienteNoEncontrado: (clientes: string[]) => `❌ No encontré ese cliente. Clientes disponibles:\n${clientes.map((c) => `• ${c}`).join("\n")}\nVolvé a escribir cliente y subcliente.`,

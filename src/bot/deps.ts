@@ -18,6 +18,8 @@ export interface SeaWhiteService {
   consultar(tipo: TipoRegistro, cliente: string, subcliente: string, identificador: string): Promise<Consulta>;
   documentacion(tipo: TipoRegistro, identificador: string): Promise<Documentacion>;
   descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer>;
+  /** Razón social del chofer por su teléfono (para el saludo); null si no está. */
+  nombrePorTelefono(telefono: string): Promise<string | null>;
   /** Comprobante de VTV o seguro por dominio (con el nombre del archivo); null si no existe. */
   documentoVehiculo(tipo: "vtv" | "seguro", dominio: string): Promise<{ pdf: Buffer; nombreArchivo: string | null } | null>;
   cargar(tipo: TipoRegistro, registros: RegistroCarga[]): Promise<ResumenCarga>;

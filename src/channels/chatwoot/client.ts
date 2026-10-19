@@ -61,11 +61,15 @@ export class ChatwootClient {
     return created.id !== undefined ? String(created.id) : null;
   }
 
-  /** Imagen con epígrafe. Devuelve el id del mensaje (para esperar su entrega). */
+  /**
+   * Imagen de bienvenida con el saludo como epígrafe (como Enri). Devuelve el
+   * id del mensaje creado, para poder esperar su entrega.
+   */
   async sendImage(conversationId: string, caption: string, image: Buffer, filename: string): Promise<string | null> {
     this.opts.echo.recordText(conversationId, caption);
+    // Tipo MIME según la extensión del archivo configurado (jpg, png, webp).
     const ext = filename.toLowerCase().split(".").pop() ?? "jpg";
-    const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
     const form = new FormData();
     form.append("content", caption);
     form.append("message_type", "outgoing");
@@ -76,26 +80,40 @@ export class ChatwootClient {
   }
 
   /**
-   * Espera a que WhatsApp confirme la ENTREGA de un mensaje (delivered/read).
-   * Aprendido en Enri: sin esto, la imagen del saludo llegaba DESPUÉS de los
-   * botones, porque Meta tarda más en procesar las imágenes.
+   * Espera a que WhatsApp confirme la ENTREGA del mensaje (status delivered/read).
+   * Copiado de Enri: es la única garantía real de orden. "sent" sólo significa
+   * que Chatwoot lo despachó, pero Meta puede seguir procesando la imagen y
+   * entregarla después que un mensaje posterior (visto en producción).
+   * Devuelve el último estado observado ("timeout..." si venció el plazo).
    */
-  async waitDelivered(conversationId: string, messageId: string, timeoutMs = 15_000): Promise<boolean> {
+  async waitMessageDelivered(conversationId: string, messageId: string, timeoutMs = 15_000): Promise<string> {
     const deadline = Date.now() + timeoutMs;
     const url = `${this.opts.baseUrl.replace(/\/$/, "")}/api/v1/accounts/${this.opts.accountId}/conversations/${conversationId}/messages`;
+    let last = "";
+    let erroresSeguidos = 0;
     while (Date.now() < deadline) {
       try {
         const res = await this.fetchWithTimeout(url, { headers: { api_access_token: this.opts.apiToken } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { payload?: Array<{ id?: number; status?: string }> };
-        const status = data.payload?.find((m) => String(m.id) === messageId)?.status;
-        if (status === "delivered" || status === "read") return true;
-        if (status === "failed") return false;
-      } catch {
-        // Error transitorio: se sigue esperando hasta el plazo.
+        erroresSeguidos = 0;
+        const status = data.payload?.find((m) => String(m.id) === messageId)?.status ?? "";
+        if (status !== last) {
+          this.opts.logger.info({ conversationId, messageId, status }, "Estado del adjunto enviado");
+          last = status;
+        }
+        if (status === "delivered" || status === "read" || status === "failed") return status;
+      } catch (err) {
+        // Un error transitorio NO abandona la espera (abandonarla revivía la
+        // carrera imagen/botones en Enri); recién tras varios seguidos se corta.
+        erroresSeguidos += 1;
+        this.opts.logger.warn({ err, conversationId, erroresSeguidos }, "No se pudo consultar el estado del mensaje; se reintenta");
+        if (erroresSeguidos >= 4) return "unknown";
       }
       await new Promise((r) => setTimeout(r, 700));
     }
-    return false;
+    this.opts.logger.warn({ conversationId, messageId, last }, "El adjunto no confirmó entrega dentro del plazo");
+    return `timeout:${last || "sin-estado"}`;
   }
 
   /**

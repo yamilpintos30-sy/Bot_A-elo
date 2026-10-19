@@ -72,6 +72,10 @@ class FakeSeaWhite implements SeaWhiteService {
     ["seguro:AF498ZJ", Buffer.concat([PDF, Buffer.from("SEGURO AF498ZJ")])],
     ["vtv:AG536VG", Buffer.concat([PDF, Buffer.from("VTV AG536VG")])],
   ]);
+  /** Sólo el teléfono del chofer de prueba está "registrado" en SEA WHITE. */
+  async nombrePorTelefono(telefono: string): Promise<string | null> {
+    return telefono === "+5492995551234" ? "OJEDA, BORIS DANIEL" : null;
+  }
   async documentoVehiculo(tipo: "vtv" | "seguro", dominio: string) {
     const pdf = this.docs.get(`${tipo}:${dominio}`);
     return pdf ? { pdf, nombreArchivo: `${dominio}.pdf` } : null;
@@ -319,9 +323,16 @@ describe("chofer", () => {
   it("saluda con imagen y muestra el menú principal de 4 opciones", async () => {
     const { say } = setup();
     const outs = await say(CHOFER, "hola");
-    expect(outs[0]).toEqual({ kind: "image", caption: expect.stringMatching(/¡Hola! Soy \*Javier\*/) });
+    // Mismo saludo que Enri; el teléfono del chofer está en SEA WHITE: lo saluda por el nombre.
+    expect(outs[0]).toEqual({ kind: "image", caption: "¡Hola, Boris Daniel Ojeda! 👋 Soy *Javier*, el asistente virtual de *SEA WHITE S.A.*" });
     expect(texts(outs)).toMatch(/Por DNI.*Por dominio.*VTV.*Seguro/s);
     expect(buttons(outs)).toEqual(MENU);
+  });
+
+  it("si el teléfono no está en SEA WHITE, saluda sin nombre (como Enri)", async () => {
+    const { say } = setup();
+    const outs = await say("+5492994440000", "hola", [], "c9");
+    expect(outs[0]).toEqual({ kind: "image", caption: "¡Hola! 👋 Soy *Javier*, el asistente virtual de *SEA WHITE S.A.*" });
   });
 
   it("Por DNI -> cliente y subcliente -> DNI -> credencial en ESA planta -> su carnet -> Menú/Consulta/Eso es todo", async () => {

@@ -15,6 +15,8 @@ export class ChatwootChannel implements Channel {
     private readonly client: ChatwootClient,
     private readonly logger: Logger,
     private readonly welcomeImagePath?: string,
+    /** WELCOME_IMAGE_DELAY_MS: colchón después de confirmar la entrega. */
+    private readonly pausaMs = 800,
   ) {}
 
   async send(conversationId: string, out: Outbound): Promise<void> {
@@ -52,11 +54,17 @@ export class ChatwootChannel implements Channel {
     }
   }
 
-  /** Espera la entrega real (delivered/read); si no se confirma, pausa de seguridad. */
+  /**
+   * Igual que Enri: garantizar el orden adjunto -> mensaje siguiente esperando
+   * la confirmación de ENTREGA (delivered/read). Si no se pudo confirmar, pausa
+   * larga de seguridad (5 s) en vez del colchón corto.
+   */
   private async esperarEntrega(conversationId: string, messageId: string | null): Promise<void> {
-    const entregado = messageId ? await this.client.waitDelivered(conversationId, messageId) : false;
-    if (!entregado) this.logger.warn({ conversationId, messageId }, "No se confirmó la entrega del adjunto; pausa de seguridad");
-    await new Promise((r) => setTimeout(r, entregado ? 600 : 3000));
+    const status = messageId ? await this.client.waitMessageDelivered(conversationId, messageId) : "sin-id";
+    const confirmada = status === "delivered" || status === "read";
+    const pausa = confirmada ? this.pausaMs : Math.max(this.pausaMs, 5000);
+    if (!confirmada) this.logger.warn({ conversationId, status, pausa }, "Entrega del adjunto sin confirmar; pausa de seguridad");
+    if (pausa > 0) await new Promise((r) => setTimeout(r, pausa));
   }
 
   private async loadWelcomeImage(): Promise<Buffer | null> {

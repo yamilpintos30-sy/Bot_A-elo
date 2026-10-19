@@ -18,6 +18,7 @@ import { findDniInText, findPatenteInText, normalizeDni, normalizePatente } from
 import type { Documentacion, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { Cliente } from "../storage/catalogo.js";
 import { todayInTimeZone } from "../utils/dates.js";
+import { nombreCompleto } from "../utils/names.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto, resolverCliente, resolverPlanta } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU, PIE } from "./comandos.js";
@@ -63,7 +64,10 @@ export class ConsultaFlow {
     const primerMensaje = !st.saludado;
     if (primerMensaje) {
       st.saludado = true;
-      await emit({ kind: "image", caption: CONSULTA.saludo(this.deps.botName) });
+      // Como Enri: foto del bot con el saludo (por el nombre si el teléfono está
+      // en SEA WHITE). El canal espera la ENTREGA de la imagen antes de seguir.
+      const nombre = await this.nombreDelContacto(session.phone);
+      await emit({ kind: "image", caption: CONSULTA.saludo(this.deps.botName, nombre) });
     }
 
     // --- Botones y comandos ---
@@ -110,6 +114,22 @@ export class ConsultaFlow {
 
     if (st.modo === "vtv" || st.modo === "seguro") return this.pasoDocumento(session, st, st.modo, msg.text, emit);
     return this.pasoCredencial(st, st.modo, msg, payload, clientes, emit);
+  }
+
+  /**
+   * Nombre del chofer por su teléfono (consulta de sólo lectura a SEA WHITE),
+   * como Enri: "MENTASTI, PEDRO CARLOS" -> "Pedro Carlos Mentasti". Si falla o
+   * no existe, el saludo queda genérico: nunca bloquea la conversación.
+   */
+  private async nombreDelContacto(phone: string | null): Promise<string | null> {
+    if (!phone) return null;
+    try {
+      const razonSocial = await this.deps.seawhite.nombrePorTelefono(phone);
+      return nombreCompleto(razonSocial) || null;
+    } catch (err) {
+      this.deps.logger.warn({ err }, "No se pudo identificar el contacto por teléfono (saludo genérico)");
+      return null;
+    }
   }
 
   // --- Menú y elección -----------------------------------------------------------

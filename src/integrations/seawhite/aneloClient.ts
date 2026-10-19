@@ -111,6 +111,20 @@ export class AneloClient {
   }
 
   /**
+   * Nombre del chofer a partir de su teléfono (anexo del manual, sólo lectura),
+   * para saludarlo por el nombre como Enri. La API saca sola el +549 y busca de
+   * forma parcial. null si no lo encuentra.
+   */
+  async nombrePorTelefono(telefono: string): Promise<string | null> {
+    const res = await this.request("POST", "/api/vencimientos/chofer/telefono", { json: { Servidor: this.opts.servidor, Telefono: telefono } });
+    if (!res.ok) return null;
+    const b = (await this.safeJson(res)) as { ok?: boolean; Razon_Social?: string; razon_Social?: string; razon_social?: string };
+    if (!b.ok) return null;
+    // El anexo documenta "Razon_Social" pero la API real responde "razon_Social" (visto en Enri).
+    return (b.Razon_Social ?? b.razon_Social ?? b.razon_social ?? "").trim() || null;
+  }
+
+  /**
    * PDF del comprobante de VTV o de seguro de un vehículo (sólo lectura).
    * Devuelve null si no existe (404): la API contempla que haya VTV y no
    * seguro, o al revés. Devuelve también el nombre del archivo, que el

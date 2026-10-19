@@ -30,6 +30,8 @@ export const SEAWHITE_ALLOWED_ENDPOINTS: readonly AllowedEndpoint[] = [
   // Son POST porque la API recibe los filtros en el cuerpo, pero SÓLO CONSULTAN.
   { method: "POST", path: "/api/vencimientos/chofer", writes: false, description: "licencia, ART y F.931 del chofer" },
   { method: "POST", path: "/api/vencimientos/camion", writes: false, description: "seguro y VTV del camión" },
+  // Nombre del chofer por su teléfono, para saludarlo como Enri (anexo del manual, sólo consulta).
+  { method: "POST", path: "/api/vencimientos/chofer/telefono", writes: false, description: "nombre del chofer por teléfono" },
   // Comprobantes de VTV y seguro por dominio ("Manual_API_DocumentosVehiculos_BOT.pdf").
   // Sólo lectura: devuelve el PDF. Dominio en mayúsculas, sin ".pdf".
   { method: "GET", path: /^\/api\/DocumentosVehiculos\/(vtv|seguro)\/[A-Z0-9]{6,8}$/, writes: false, description: "PDF de VTV o seguro" },

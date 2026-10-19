@@ -24,6 +24,12 @@ export const generalSchema = z.object({
   BOT_NAME: z.string().default("Javier"),
   /** Imagen del saludo a los choferes (avatar). Si no existe el archivo, el saludo sale sólo con texto. */
   WELCOME_IMAGE: z.string().default("assets/javier.jpg"),
+  /**
+   * Pausa extra (ms) después de que WhatsApp confirma la entrega de la imagen
+   * del saludo (o de un PDF) y antes del mensaje siguiente. Igual que Enri:
+   * la espera principal es por estado delivered/read; esto es un colchón.
+   */
+  WELCOME_IMAGE_DELAY_MS: z.coerce.number().int().min(0).default(800),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   TIMEZONE: z.string().default("America/Argentina/Buenos_Aires"),
