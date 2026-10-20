@@ -68,3 +68,27 @@ Leelos de forma independiente y, para cada uno, informá:
 - vencimiento: la fecha hasta la que el registro habilita el ingreso o el acceso, en formato dd-MM-yyyy. Las fechas de emisión, impresión o habilitación para conducir no son el vencimiento. null si no se lee con seguridad.
 - unSoloCarnet: true si el documento identifica exactamente UN registro (un solo carnet completo, un listado con exactamente una fila marcada, o una sola fila).
 No completes ni supongas datos: si algo no se lee con claridad, devolvé null.`;
+
+/** Primera página, para decidir el camino: carnets (sandbox) o listado (lectura directa). */
+export const CLASIFICACION_PROMPT = `La imagen es la primera página de un PDF con documentación de ingreso a plantas petroleras. Decí de qué clase es:
+- "carnets": credenciales individuales, una por persona o por vehículo (una por página o varias en grilla).
+- "listado": una tabla o estado general (por ejemplo, la captura de un portal) con varias personas y/o vehículos, cada uno con su fecha, sin carnet individual.`;
+
+/** Lectura de un listado, en franjas de imagen: los datos y la altura aproximada de cada fila. */
+export const LECTURA_LISTADO_PROMPT = `Las imágenes de arriba son franjas consecutivas (de arriba hacia abajo) de un LISTADO de documentación de ingreso a plantas petroleras: una tabla o estado general con personas y/o vehículos, cada uno con su fecha, sin carnet individual. El formato depende de quién lo emite: miralo, no lo supongas.
+
+Cada fila de una tabla de personas o de vehículos es un REGISTRO. Informá TODOS, de personas y de vehículos (la selección de qué se carga se hace después). Para cada uno:
+- recorte: el número de la franja donde está la fila.
+- yCentro: a qué altura está el centro de la fila en esa franja, en píxeles desde el borde de arriba (aproximado alcanza).
+- tipo: "chofer" (persona) o "dominio" (vehículo).
+- identificador: el DNI solo con números; si sólo figura el CUIL/CUIT, el CUIL completo de 11 números (el sistema extrae el DNI); en un vehículo, la patente en mayúsculas sin espacios.
+- apellidoNombre: "APELLIDO, NOMBRE" o null si es un vehículo.
+- vencimiento: la fecha HASTA la que el registro habilita el acceso a la planta, en formato dd-MM-yyyy; en un listado suele ser la fecha asociada al estado o al próximo vencimiento que le impediría el acceso.
+- observaciones: lo que cambie si la persona o el vehículo puede trabajar (por ejemplo, que esté inhabilitado, o el motivo de no acceso que figure), o null.
+
+Además:
+- formato: descripción breve (emisor, qué tablas tiene).
+- clienteDetectado: la empresa u operador PARA QUIEN es el estado, es decir, el dueño de la planta; no la contratista a la que pertenecen las personas ni la empresa de control. null si no figura.
+- descartados: filas que no se pudieron leer, con el motivo.
+
+Si una fila aparece cortada entre dos franjas, informala una sola vez, en la franja donde se ve su texto. Nunca inventes ni completes datos: si un dato no se lee con seguridad, poné null.`;
