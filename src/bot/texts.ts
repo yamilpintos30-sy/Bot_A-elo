@@ -89,10 +89,16 @@ export const CARGA = {
 /** Filtro de tipo: el PDF trae carnets del tipo elegido y también del otro. */
 export function avisoTipoMezclado(elegido: "chofer" | "dominio", otros: CarnetListo[]): string {
   const otro = elegido === "chofer" ? "dominio" : "chofer";
+  const que = (t: "chofer" | "dominio") => (t === "chofer" ? "personas" : "vehículos");
   return [
-    `⚠️ El PDF también tiene ${otros.length} ${TIPO[otro].carnets}, que NO se van a cargar porque elegiste *${TIPO[elegido].plural}*:`,
-    ...otros.map((c) => `• pág. ${c.pagina}: ${c.apellidoNombre ? `${c.apellidoNombre} (${c.identificador})` : c.identificador}`),
+    `⚠️ En este documento hay ${que(elegido)} y ${que(otro)}: solo se subirán ${elegido === "chofer" ? "las personas" : "los vehículos"} (*${TIPO[elegido].plural}*).`,
+    `Para subir ${elegido === "chofer" ? "los vehículos" : "las personas"} (${otros.length}), al terminar vas a tener un botón.`,
   ].join("\n");
+}
+
+/** Después de cargar un tipo, ofrecer el otro tipo del MISMO documento. */
+export function ofrecerOtroTipo(otro: "chofer" | "dominio", cantidad: number): string {
+  return `El documento también tiene ${cantidad} ${TIPO[otro].carnets}. ¿Querés cargarlos ahora?`;
 }
 
 function lineaRechazo(r: CarnetRechazado): string {

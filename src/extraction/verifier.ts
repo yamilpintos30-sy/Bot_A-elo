@@ -12,6 +12,7 @@ import type { ClaudeRunner, UsageTotals } from "./claudeRunner.js";
 import { VERIFICACION_JSON_SCHEMA, verificacionSchema, type VerificacionDocumento } from "./manifest.js";
 import { VERIFICACION_PROMPT } from "./prompts.js";
 import type { ExtractionOptions } from "./carnetExtractor.js";
+import { formatoDe } from "./aPdf.js";
 
 /** Documentos por pedido: carnets chicos, pero se acota para no armar pedidos enormes. */
 const POR_PEDIDO = 15;
@@ -24,16 +25,28 @@ export class CarnetVerifier {
   ) {}
 
   /** Devuelve la lectura independiente de cada archivo, por nombre. */
-  async verify(archivos: Map<string, Buffer>, usage: UsageTotals): Promise<Map<string, VerificacionDocumento>> {
+  /**
+   * Devuelve la lectura independiente de cada archivo, por nombre. En un
+   * listado se lee la imagen ampliada de la fila (`recortes`) y no la página
+   * entera: el documento completo tiene letra chica y se repetiría por cada registro.
+   */
+  async verify(archivos: Map<string, Buffer>, usage: UsageTotals, recortes: Map<string, Buffer> = new Map()): Promise<Map<string, VerificacionDocumento>> {
     const entries = [...archivos.entries()];
     const result = new Map<string, VerificacionDocumento>();
 
     for (let start = 0; start < entries.length; start += POR_PEDIDO) {
       const chunk = entries.slice(start, start + POR_PEDIDO);
       const content: Array<Record<string, unknown>> = [];
-      chunk.forEach(([, pdf], i) => {
+      chunk.forEach(([nombre, pdf], i) => {
         content.push({ type: "text", text: `Documento ${i + 1}:` });
-        content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } });
+        const img = recortes.get(nombre);
+        const formato = img ? formatoDe(img) : null;
+        if (img && (formato === "png" || formato === "jpg")) {
+          const media = formato === "png" ? "image/png" : "image/jpeg";
+          content.push({ type: "image", source: { type: "base64", media_type: media, data: img.toString("base64") } });
+        } else {
+          content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } });
+        }
       });
       content.push({ type: "text", text: VERIFICACION_PROMPT });
 

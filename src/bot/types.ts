@@ -57,6 +57,8 @@ export interface CargadorState {
   pdf?: { url: string; fileName: string };
   /** Id del lote procesado y pendiente de confirmar (en memoria). */
   loteId?: string;
+  /** Ya se cargó un tipo y se ofrece cargar el otro tipo del mismo documento. */
+  ofreciendoOtro?: boolean;
 }
 
 /** Una credencial encontrada en la última consulta (para el botón "Ver carnet"). */

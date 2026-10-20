@@ -121,6 +121,16 @@ describe("revisión final", () => {
     expect(r.aceptados[0]).toMatchObject({ identificador: "33615617", vencimiento: "18-10-2026", vencido: false, apellidoNombre: "PEREZ, JUAN" });
   });
 
+  it("CUIL en lugar de DNI (listados): saca los 2 primeros y el último dígito, validando el verificador", () => {
+    // Caso real del listado PAE SLB: 20-33919536-7 -> DNI 33919536.
+    const r = run(
+      { modo: "listado", carnets: [carnet("a.pdf", "20339195367", "31-10-2026"), carnet("b.pdf", "20339195360", "31-10-2026")], descartados: [] },
+      { "a.pdf": verif("20-33919536-7", "31-10-2026"), "b.pdf": verif("20339195360", "31-10-2026") },
+    );
+    expect(r.aceptados.map((c) => c.identificador)).toEqual(["33919536"]);
+    expect(r.rechazados).toHaveLength(1); // dígito verificador inválido: no se adivina el DNI
+  });
+
   it("rechaza si la verificación lee otro DNI, otra fecha o más de un carnet", () => {
     const r = run(
       {

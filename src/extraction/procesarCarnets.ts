@@ -47,7 +47,7 @@ export class ProcesadorCarnets {
     await onEtapa?.("separando");
     const extraccion = await this.extractor.extract(pdf, filename, usage);
     await onEtapa?.("verificando");
-    const verificacion = await this.verifier.verify(extraccion.archivos, usage);
+    const verificacion = await this.verifier.verify(extraccion.archivos, usage, extraccion.recortes);
     const review = reviewCarnets({
       manifest: extraccion.manifest,
       archivos: extraccion.archivos,

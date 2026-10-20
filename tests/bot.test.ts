@@ -261,11 +261,36 @@ describe("cargador", () => {
     });
     await say(CARGADOR, "👤 Choferes");
     await say(CARGADOR, "Total planta 1");
-    const outs = await say(CARGADOR, "", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/también tiene 1 carnets de vehículos, que NO se van a cargar.*AF498ZJ/s);
+    let outs = await say(CARGADOR, "", [pdfAdj()]);
+    expect(texts(outs)).toMatch(/hay personas y vehículos: solo se subirán las personas/);
     expect(texts(outs)).toMatch(/1 listo para cargar \(1 persona\)/);
-    await say(CARGADOR, "Confirmar carga");
+    outs = await say(CARGADOR, "Confirmar carga");
     expect(seawhite.cargas.map((c) => [c.tipo, c.registros.map((r) => r.identificador)])).toEqual([["chofer", ["33615617"]]]);
+    // Botón para cargar los vehículos del MISMO documento (sin reprocesar).
+    expect(texts(outs)).toMatch(/también tiene 1 carnets de vehículos/);
+    expect(buttons(outs)).toEqual(["🚛 Cargar dominios", "Menú 😊", "Eso es todo, gracias"]);
+    outs = await say(CARGADOR, "🚛 Cargar dominios");
+    expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
+    outs = await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas.map((c) => [c.tipo, c.registros.map((r) => r.identificador)])).toEqual([
+      ["chofer", ["33615617"]],
+      ["dominio", ["AF498ZJ"]],
+    ]);
+    // Ya no se ofrece nada más: vuelve al menú.
+    expect(buttons(outs)).not.toContain("👤 Cargar choferes");
+  });
+
+  it("PDF mezclado: Menú después de cargar un tipo descarta el otro", async () => {
+    const { say, seawhite } = setup({
+      procesar: async () => resultado([carnet("33615617", "18-10-2026"), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null, pagina: 2 })]),
+    });
+    await say(CARGADOR, "🚛 Dominios");
+    await say(CARGADOR, "Total planta 1");
+    await say(CARGADOR, "", [pdfAdj()]);
+    await say(CARGADOR, "Confirmar carga");
+    const outs = await say(CARGADOR, "Menú 😊");
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(seawhite.cargas.map((c) => c.tipo)).toEqual(["dominio"]);
   });
 
   it("Cancelar no carga nada y vuelve al menú", async () => {

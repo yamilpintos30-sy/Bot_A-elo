@@ -18,9 +18,9 @@ import type { Cliente } from "../storage/catalogo.js";
 import type { CarnetRegistrado } from "../storage/registro.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto, resolverCliente, resolverPlanta } from "./catalogo.js";
-import { BOTON_FIN } from "./comandos.js";
+import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
 import type { BotDeps, Emit, LotePendiente } from "./deps.js";
-import { avisoTipoMezclado, CARGA, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
+import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
 const MENU: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
@@ -242,6 +242,19 @@ export class CargadorFlow {
       session.cargador = { etapa: "esperando_datos" };
       return this.conMenu(emit, CARGA.expirada);
     }
+    // Ya se cargó un tipo: se ofrece cargar el otro tipo del mismo documento.
+    if (st.ofreciendoOtro) {
+      if (payload === "cargarotro") {
+        st.ofreciendoOtro = false;
+        return this.mostrarResumen(lote, emit);
+      }
+      if (payload === "menu" || payload === "cancelar") {
+        this.deps.lotes.borrar(st.loteId);
+        session.cargador = { etapa: "esperando_datos" };
+        return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
+      }
+      return this.ofrecerOtro(lote, emit);
+    }
     if (payload === "cancelar") {
       this.deps.lotes.borrar(st.loteId);
       session.cargador = { etapa: "esperando_datos" };
@@ -257,7 +270,7 @@ export class CargadorFlow {
     if (payload === "confirmar" && hayDelTipo) {
       this.deps.lotes.borrar(st.loteId);
       session.cargador = { etapa: "esperando_datos" };
-      return this.confirmar(lote, emit);
+      return this.confirmar(session, lote, emit);
     }
     // Cualquier otra cosa: se repite la pregunta pendiente con SUS botones
     // (si el PDF era del otro tipo, vuelve el aviso con "Cargar ..." / "Cancelar").
@@ -265,7 +278,14 @@ export class CargadorFlow {
     return emit({ kind: "buttons", text: CARGA.pendiente, buttons: [CONFIRMAR, CANCELAR] });
   }
 
-  private async confirmar(lote: LotePendiente, emit: Emit): Promise<void> {
+  /** Botón para cargar el otro tipo del mismo documento. */
+  private ofrecerOtro(lote: LotePendiente, emit: Emit): Promise<void> {
+    const cantidad = lote.resultado.aceptados.filter((c) => c.tipo === lote.tipo).length;
+    const boton = lote.tipo === "dominio" ? "🚛 Cargar dominios" : "👤 Cargar choferes";
+    return emit({ kind: "buttons", text: ofrecerOtroTipo(lote.tipo, cantidad), buttons: [{ title: boton, payload: "cargarotro" }, BOTON_MENU, BOTON_FIN] });
+  }
+
+  private async confirmar(session: Session, lote: LotePendiente, emit: Emit): Promise<void> {
     const aCargar: CarnetListo[] = lote.resultado.aceptados.filter((c) => c.tipo === lote.tipo);
     await emit({ kind: "text", text: CARGA.cargando(aCargar.length) });
 
@@ -311,6 +331,17 @@ export class CargadorFlow {
       })
       .catch((err) => this.deps.logger.warn({ err }, "No se pudo cerrar el registro de la carga"));
 
+    // Documento mezclado: si quedó el otro tipo sin cargar, se ofrece con un botón
+    // (sin volver a procesar el PDF).
+    const cargados = [...(lote.tiposCargados ?? []), lote.tipo];
+    const otro = otroTipo(lote.tipo);
+    if (!cargados.includes(otro) && lote.resultado.aceptados.some((c) => c.tipo === otro)) {
+      const siguiente: LotePendiente = { ...lote, tipo: otro, tiposCargados: cargados };
+      const loteId = this.deps.lotes.guardar(siguiente);
+      session.cargador = { etapa: "esperando_confirmacion", tipo: otro, clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo, loteId, ofreciendoOtro: true };
+      await emit({ kind: "text", text: resultadoCarga(lote.destino, resumen), sinPie: true });
+      return this.ofrecerOtro(siguiente, emit);
+    }
     return this.conMenu(emit, resultadoCarga(lote.destino, resumen));
   }
 

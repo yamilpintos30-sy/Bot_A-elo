@@ -30,6 +30,8 @@ export interface ExtractionResult {
   manifest: Manifest;
   /** PDFs recortados, por nombre de archivo. */
   archivos: Map<string, Buffer>;
+  /** Listado: imagen ampliada de la fila de cada registro, por nombre del PDF (sólo para verificar). */
+  recortes: Map<string, Buffer>;
   /** Última respuesta de texto del modelo (para el registro). */
   notaModelo: string;
 }
@@ -91,6 +93,8 @@ export class CarnetExtractor {
         );
         responses.push(response);
         containerId = response.container?.id ?? containerId;
+        const u = response.usage;
+        if (u) this.logger.debug({ paso: i + 1, stop: response.stop_reason, entrada: u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), salida: u.output_tokens }, "Paso de extracción");
         if (response.stop_reason !== "pause_turn") break;
         if (i >= MAX_CONTINUACIONES) throw new ExtractionError("El procesamiento del PDF no terminó dentro del límite de pasos.");
         // Turno pausado: se reenvía tal cual y el servidor lo retoma.
@@ -115,6 +119,13 @@ export class CarnetExtractor {
       }
       archivos.delete("manifest.json");
       const manifest = parseManifest(manifestBytes);
+      // Las imágenes de las filas no se cargan: se separan de los PDF.
+      const recortes = new Map<string, Buffer>();
+      for (const c of manifest.carnets) {
+        const img = c.recorte ? archivos.get(safeName(c.recorte)) : undefined;
+        if (img) recortes.set(c.archivo, img);
+      }
+      for (const nombre of [...archivos.keys()]) if (!nombre.toLowerCase().endsWith(".pdf")) archivos.delete(nombre);
 
       const notaModelo = last.content
         .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
@@ -122,7 +133,7 @@ export class CarnetExtractor {
         .join("\n")
         .trim();
       this.logger.info({ carnets: manifest.carnets.length, descartados: manifest.descartados.length, archivos: archivos.size, pasos: responses.length }, "Extracción de carnets terminada");
-      return { manifest, archivos, notaModelo };
+      return { manifest, archivos, recortes, notaModelo };
     } catch (err) {
       if (err instanceof ExtractionError || err instanceof ClaudeError) throw err;
       throw new ExtractionError(`No se pudo procesar el PDF: ${(err as Error).message}`);

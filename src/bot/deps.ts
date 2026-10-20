@@ -55,6 +55,8 @@ export type Emit = (out: Outbound) => Promise<void>;
 export interface LotePendiente {
   /** Tipo que eligió el cargador en el menú (chofer o dominio). */
   tipo: TipoRegistro;
+  /** Tipos ya cargados de este documento (en un documento mezclado se cargan de a uno). */
+  tiposCargados?: TipoRegistro[];
   cargaId: number | null;
   clienteCodigo: string;
   plantaCodigo: string;

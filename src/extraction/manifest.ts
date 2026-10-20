@@ -24,12 +24,16 @@ export const carnetManifestSchema = z.object({
   pagina: z.number().int().min(1),
   /** Datos relevantes que no se cargan pero hay que avisar (p. ej. "Inhabilitado para conducir"). */
   observaciones: z.string().nullable().optional(),
+  /** Listado: imagen ampliada de la fila marcada, sólo para la verificación (no se carga). */
+  recorte: z.string().nullable().optional(),
 });
 export type CarnetManifest = z.infer<typeof carnetManifestSchema>;
 
 export const manifestSchema = z.object({
   /** Descripción breve del formato detectado (para el registro). */
   formato: z.string().optional(),
+  /** "carnets" (credenciales individuales) o "listado" (tabla de estados: cada registro lleva el documento completo con su fila marcada). */
+  modo: z.enum(["carnets", "listado"]).optional(),
   carnets: z.array(carnetManifestSchema),
   /** Carnets o páginas que no se pudieron procesar, con el motivo. */
   descartados: z.array(z.object({ pagina: z.number().int().nullable().optional(), motivo: z.string() })).default([]),
