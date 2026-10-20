@@ -2,8 +2,10 @@
  * El bot de punta a punta con dobles: catálogo, cargadores, registro y
  * sesiones en memoria; SEA WHITE y el procesador de carnets falsos.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import pino from "pino";
+import { PDFDocument } from "pdf-lib";
 import { resolver } from "../src/bot/catalogo.js";
 import { LotesPendientes, type BotDeps, type SeaWhiteService } from "../src/bot/deps.js";
 import { BotEngine } from "../src/bot/engine.js";
@@ -185,7 +187,7 @@ describe("cargador", () => {
 
     outs = await say(CARGADOR, "Total planta 1");
     expect(texts(outs)).toMatch(/✅ Cliente y subcliente encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
-    expect(texts(outs)).toMatch(/Mandá el PDF con los carnets de personas/);
+    expect(texts(outs)).toMatch(/Mandá el PDF \(o las fotos\) con los carnets de personas/);
 
     outs = await say(CARGADOR, "", [pdfAdj()]);
     const t = texts(outs);
@@ -285,11 +287,36 @@ describe("cargador", () => {
     expect(procesar).toHaveBeenCalledTimes(1);
   });
 
-  it("rechaza adjuntos que no son PDF", async () => {
+  it("rechaza adjuntos que no son PDF ni fotos (audio, video)", async () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
-    const outs = await say(CARGADOR, "", [{ url: "https://chatwoot/foto.jpg", fileType: "image", contentType: "image/jpeg" }]);
-    expect(texts(outs)).toMatch(/Solo se aceptan archivos PDF/);
+    const outs = await say(CARGADOR, "", [{ url: "https://chatwoot/nota.ogg", fileType: "audio", contentType: "audio/ogg" }]);
+    expect(texts(outs)).toMatch(/Solo se aceptan archivos PDF o fotos/);
+  });
+
+  it("FOTOS de carnets: se convierten a PDF (varias fotos -> un solo PDF) y se procesan igual", async () => {
+    const { say, deps, procesar } = setup();
+    const jpg = readFileSync("assets/javier.jpg");
+    deps.descargarAdjunto = vi.fn(async () => jpg);
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1");
+    const foto = (n: string): IncomingAttachment => ({ url: `https://chatwoot/${n}`, fileType: "image", contentType: "image/jpeg", fileName: n });
+    const outs = await say(CARGADOR, "", [foto("carnet1.jpg"), foto("carnet2.jpg")]);
+    expect(texts(outs)).toMatch(/Recibí \*2 archivos\*/);
+    const [pdf, nombre] = procesar.mock.calls[0]! as unknown as [Buffer, string];
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2); // una página por foto
+    expect(nombre).toBe("2 archivos.pdf");
+    expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
+  });
+
+  it("un archivo que dice ser foto pero no lo es: avisa y no procesa", async () => {
+    const { say, deps, procesar } = setup();
+    deps.descargarAdjunto = vi.fn(async () => Buffer.from("esto no es una imagen"));
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "Total planta 1", [{ url: "https://chatwoot/x.jpg", fileType: "image", fileName: "x.jpg" }]);
+    expect(texts(outs)).toMatch(/"x\.jpg" no es un PDF ni una foto JPG o PNG/);
+    expect(procesar).not.toHaveBeenCalled();
   });
 
   it("si no queda ningún carnet apto lo informa y vuelve al menú", async () => {

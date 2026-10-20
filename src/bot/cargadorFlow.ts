@@ -11,7 +11,7 @@
  *
  * Sin cordialidades: cada mensaje es un dato o un pedido puntual.
  */
-import { isPdf } from "../integrations/seawhite/aneloClient.js";
+import { FormatoNoSoportadoError, unirEnPdf } from "../extraction/aPdf.js";
 import type { RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { CarnetListo } from "../extraction/review.js";
 import type { Cliente } from "../storage/catalogo.js";
@@ -32,14 +32,17 @@ const AVISO_PROGRESO_MS = 60_000;
 
 const otroTipo = (t: TipoRegistro): TipoRegistro => (t === "chofer" ? "dominio" : "chofer");
 
-function esPdfAdjunto(a: IncomingAttachment): boolean {
-  return /pdf/i.test(a.contentType ?? "") || /\.pdf$/i.test(a.fileName ?? "") || /\.pdf(\?|$)/i.test(a.url);
+/** PDF o foto (JPG/PNG): las fotos de carnets se convierten a PDF antes de procesar. */
+function esDocumentoAdjunto(a: IncomingAttachment): boolean {
+  const tipo = `${a.contentType ?? ""} ${a.fileName ?? ""} ${a.url.split("?")[0] ?? ""}`.toLowerCase();
+  return a.fileType === "image" || /pdf|image\/(jpe?g|png)|\.(pdf|jpe?g|png)\b/.test(tipo);
 }
 
 function nombreArchivo(a: IncomingAttachment): string {
   if (a.fileName) return a.fileName;
   const fromUrl = decodeURIComponent(a.url.split("?")[0]?.split("/").pop() ?? "");
-  return /\.pdf$/i.test(fromUrl) ? fromUrl : "documento.pdf";
+  if (/\.(pdf|jpe?g|png)$/i.test(fromUrl)) return fromUrl;
+  return a.fileType === "image" ? "foto.jpg" : "documento.pdf";
 }
 
 /** "chofer", "choferes", "dominio", "dominios" escritos en vez de tocar el botón. */
@@ -68,15 +71,16 @@ export class CargadorFlow {
     }
 
     // Adjuntos.
-    const pdfs = msg.attachments.filter(esPdfAdjunto);
-    if (msg.attachments.length > 0 && pdfs.length === 0) await emit({ kind: "text", text: CARGA.soloPdf });
-    if (pdfs.length > 1) await emit({ kind: "text", text: CARGA.unPdfPorVez });
-    if (pdfs[0]) st.pdf = { url: pdfs[0].url, fileName: nombreArchivo(pdfs[0]) };
+    // Adjuntos: PDF o fotos de carnets (varias fotos juntas se unen en un solo PDF).
+    if (st.pdf && !st.archivos) st.archivos = [st.pdf];
+    const docs = msg.attachments.filter(esDocumentoAdjunto);
+    if (msg.attachments.length > docs.length) await emit({ kind: "text", text: CARGA.soloPdf });
+    if (docs.length > 0) st.archivos = [...(st.archivos ?? []), ...docs.map((a) => ({ url: a.url, fileName: nombreArchivo(a) }))];
 
     // 1) Menú: choferes o dominios.
     const tipo = payload?.startsWith("tipo:") ? (payload.slice(5) as TipoRegistro) : tipoEscrito(msg.text);
     if (tipo) {
-      session.cargador = { etapa: "esperando_datos", tipo, pdf: st.pdf };
+      session.cargador = { etapa: "esperando_datos", tipo, archivos: st.archivos };
       return emit({ kind: "text", text: CARGA.pedirClienteSubcliente(tipo) });
     }
     if (!st.tipo) return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
@@ -102,7 +106,7 @@ export class CargadorFlow {
     const destino = etiqueta(...this.par(clientes, st));
 
     // 3) PDF.
-    if (!st.pdf) return emit({ kind: "text", text: CARGA.encontrado(destino, st.tipo) });
+    if (!st.archivos?.length) return emit({ kind: "text", text: CARGA.encontrado(destino, st.tipo) });
     if (reconocio) await emit({ kind: "text", text: `✅ Cliente y subcliente encontrados: *${destino}*.` });
     return this.procesar(session, st, destino, emit);
   }
@@ -148,26 +152,36 @@ export class CargadorFlow {
   // --- Procesamiento ---------------------------------------------------------------
 
   private async procesar(session: Session, st: CargadorState, destino: string, emit: Emit): Promise<void> {
-    const pdfRef = st.pdf!;
+    const archivos = st.archivos!;
+    const nombre = archivos.length === 1 ? archivos[0]!.fileName : `${archivos.length} archivos`;
     const tipo = st.tipo!;
     const clienteCodigo = st.clienteCodigo!;
     const plantaCodigo = st.plantaCodigo!;
     // Pase lo que pase, el próximo mensaje arranca del menú (o va a la confirmación).
     session.cargador = { etapa: "esperando_datos" };
 
-    await emit({ kind: "text", text: CARGA.recibido(pdfRef.fileName) });
+    await emit({ kind: "text", text: CARGA.recibido(nombre) });
 
-    let pdf: Buffer;
+    let descargados: Array<{ nombre: string; bytes: Buffer }>;
     try {
-      pdf = await this.deps.descargarAdjunto(pdfRef.url);
+      descargados = await Promise.all(archivos.map(async (a) => ({ nombre: a.fileName, bytes: await this.deps.descargarAdjunto(a.url) })));
     } catch (err) {
-      this.deps.logger.error({ err }, "No se pudo descargar el PDF del cargador");
+      this.deps.logger.error({ err }, "No se pudo descargar el archivo del cargador");
       return this.conMenu(emit, CARGA.noDescarga);
     }
-    if (!isPdf(pdf)) return this.conMenu(emit, CARGA.noEsPdf);
+    // Lo que no es PDF (fotos de carnets) se convierte a PDF; varias fotos van en un solo PDF.
+    let pdf: Buffer;
+    try {
+      pdf = await unirEnPdf(descargados);
+    } catch (err) {
+      if (err instanceof FormatoNoSoportadoError) return this.conMenu(emit, CARGA.formatoNoSoportado(err.archivo));
+      this.deps.logger.error({ err }, "No se pudo armar el PDF con los archivos recibidos");
+      return this.conMenu(emit, CARGA.formatoNoSoportado(nombre));
+    }
+    const nombrePdf = /\.pdf$/i.test(nombre) ? nombre : `${nombre.replace(/\.[a-z]+$/i, "")}.pdf`;
 
     const cargaId = await this.deps.registro
-      .crearCarga({ conversationId: session.conversationId, telefono: session.phone, clienteCodigo, plantaCodigo, archivo: pdfRef.fileName })
+      .crearCarga({ conversationId: session.conversationId, telefono: session.phone, clienteCodigo, plantaCodigo, archivo: nombre })
       .catch((err) => {
         this.deps.logger.warn({ err }, "No se pudo registrar la carga (se sigue igual)");
         return null;
@@ -177,7 +191,7 @@ export class CargadorFlow {
     const timer = setInterval(() => void emit({ kind: "text", text: CARGA.sigue }).catch(() => undefined), this.avisoProgresoMs);
     let resultado: LotePendiente["resultado"];
     try {
-      resultado = await this.deps.procesador.procesar(pdf, pdfRef.fileName, async (etapa) => {
+      resultado = await this.deps.procesador.procesar(pdf, nombrePdf, async (etapa) => {
         if (etapa === "verificando") await emit({ kind: "text", text: CARGA.verificando });
       });
     } catch (err) {
@@ -196,7 +210,7 @@ export class CargadorFlow {
       return this.conMenu(emit, sinCarnetsAptos(destino, resultado.rechazados));
     }
 
-    const lote: LotePendiente = { tipo, cargaId, clienteCodigo, plantaCodigo, destino, archivo: pdfRef.fileName, resultado };
+    const lote: LotePendiente = { tipo, cargaId, clienteCodigo, plantaCodigo, destino, archivo: nombre, resultado };
     const loteId = this.deps.lotes.guardar(lote);
     session.cargador = { etapa: "esperando_confirmacion", tipo, clienteCodigo, plantaCodigo, loteId };
     return this.mostrarResumen(lote, emit);

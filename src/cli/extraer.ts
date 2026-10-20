@@ -11,6 +11,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { claudeSchema, generalSchema, parseConfig } from "../config.js";
+import { unirEnPdf } from "../extraction/aPdf.js";
 import { ProcesadorCarnets } from "../extraction/procesarCarnets.js";
 import { logger } from "../utils/logger.js";
 
@@ -21,7 +22,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const config = parseConfig(generalSchema.extend(claudeSchema.shape));
-  const pdf = await readFile(input);
+  // Igual que el bot: si es una foto (JPG/PNG), se convierte a PDF antes de procesar.
+  const pdf = await unirEnPdf([{ nombre: path.basename(input), bytes: await readFile(input) }]);
   const outDir = path.resolve(outArg ?? path.join("salida-extraccion", path.basename(input, path.extname(input))));
   await mkdir(outDir, { recursive: true });
 

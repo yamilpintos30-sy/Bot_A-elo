@@ -51,7 +51,9 @@ export interface CargadorState {
   tipo?: "chofer" | "dominio";
   clienteCodigo?: string;
   plantaCodigo?: string;
-  /** PDF recibido y todavía no procesado. */
+  /** Archivos recibidos y todavía no procesados (PDF o fotos de carnets). */
+  archivos?: Array<{ url: string; fileName: string }>;
+  /** Formato viejo (un solo PDF): se sigue leyendo por las sesiones guardadas. */
   pdf?: { url: string; fileName: string };
   /** Id del lote procesado y pendiente de confirmar (en memoria). */
   loteId?: string;
