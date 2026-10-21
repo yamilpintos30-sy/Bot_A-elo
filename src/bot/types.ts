@@ -84,6 +84,12 @@ export interface ConsultaState {
   /** Ya se le pidió la planta (para avisar "no encontré ese cliente" sólo después). */
   pidioPlanta?: boolean;
   /**
+   * Rama elegida en el menú principal:
+   *   habilitacion -> cliente y subcliente -> por DNI o por dominio
+   *   vehiculo     -> VTV o seguro por patente (sin planta)
+   */
+  rama?: "habilitacion" | "vehiculo";
+  /**
    * Opción elegida en el menú principal:
    *   chofer / dominio -> credencial de ingreso (con cliente y subcliente) por DNI o patente
    *   vtv / seguro     -> comprobante del vehículo por patente (sin cliente)

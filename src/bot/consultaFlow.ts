@@ -1,17 +1,17 @@
 /**
  * Flujo de CONSULTA (choferes y cualquier número que no sea cargador).
  *
- *   saludo cordial con la imagen del bot -> MENÚ PRINCIPAL:
- *     🪪 Por DNI      -> cliente y subcliente -> DNI     -> credencial + licencia/ART/F.931 -> ¿carnet?
- *     🚛 Por dominio  -> cliente y subcliente -> patente -> credencial + seguro/VTV        -> ¿carnet?
- *     📄 VTV          -> patente -> PDF de la VTV    -> ¿querés también el seguro?
- *     🛡️ Seguro       -> patente -> PDF del seguro   -> ¿querés también la VTV?
+ *   saludo con la imagen del bot -> MENÚ PRINCIPAL, dos ramas:
  *
- *   Al terminar: [Menú 😊] borra DNI, dominio, cliente y subcliente (para
- *   consultar otro), [🔎 Consulta] repite por DNI o dominio en la MISMA planta,
- *   [Eso es todo, gracias] cierra.
+ *   🪪 Habilitación  -> cliente y subcliente -> [Por DNI] [Por dominio] [Menú]
+ *        DNI     -> credencial en esa planta + licencia/ART/F.931 -> ¿carnet?
+ *        patente -> credencial en esa planta + seguro/VTV         -> ¿carnet?
+ *        al terminar: [Menú 😊] vuelve al inicio (borra la planta),
+ *        [🔎 Consulta] otro DNI o dominio en la MISMA planta, [Eso es todo].
  *
- * La credencial va por cliente + subcliente porque un mismo DNI o patente
+ *   📄 VTV y seguro  -> [VTV] [Seguro] [Menú] -> patente -> PDF -> ¿el otro también?
+ *
+ * La habilitación va por cliente + subcliente porque un mismo DNI o patente
  * puede estar cargado en varias plantas. VTV y seguro van sólo por dominio.
  */
 import { findDniInText, findPatenteInText, normalizeDni, normalizePatente } from "../domain/validators.js";
@@ -27,27 +27,46 @@ import { CONSULTA, respuestaConsulta, type LineaPlanta } from "./texts.js";
 import type { ButtonSpec, ConsultaState, IncomingMessage, Session } from "./types.js";
 
 type Modo = NonNullable<ConsultaState["modo"]>;
+type Rama = NonNullable<ConsultaState["rama"]>;
 type Doc = "vtv" | "seguro";
 
-/** Menú principal: 4 opciones + cerrar (WhatsApp lo muestra como lista). */
+/** Menú principal: las dos ramas + cerrar. */
 const MENU_PRINCIPAL: ButtonSpec[] = [
-  { title: "🪪 Por DNI", payload: "m:chofer" },
-  { title: "🚛 Por dominio", payload: "m:dominio" },
-  { title: "📄 VTV", payload: "m:vtv" },
-  { title: "🛡️ Seguro", payload: "m:seguro" },
+  { title: "🪪 Habilitación", payload: "r:habilitacion" },
+  { title: "📄 VTV y seguro", payload: "r:vehiculo" },
   BOTON_FIN,
 ];
+const MENU_HABILITACION: ButtonSpec[] = [{ title: "🪪 Por DNI", payload: "m:chofer" }, { title: "🚛 Por dominio", payload: "m:dominio" }, BOTON_MENU];
+const MENU_VEHICULO: ButtonSpec[] = [{ title: "📄 VTV", payload: "m:vtv" }, { title: "🛡️ Seguro", payload: "m:seguro" }, BOTON_MENU];
 const BOTON_CONSULTA: ButtonSpec = { title: "🔎 Consulta", payload: "consulta" };
-/** Cierre de una consulta de credencial: de cero, otra en la misma planta, o terminar. */
+/** Cierre de una consulta de habilitación: inicio, otra en la misma planta, o terminar. */
 const FIN_CONSULTA: ButtonSpec[] = [BOTON_MENU, BOTON_CONSULTA, BOTON_FIN];
 
+const ramaDe = (m: Modo): Rama => (m === "vtv" || m === "seguro" ? "vehiculo" : "habilitacion");
+
+interface Opcion {
+  rama: Rama;
+  modo?: Modo;
+}
+
+function opcionDeBoton(payload: string | undefined): Opcion | undefined {
+  if (payload === "r:habilitacion" || payload === "r:vehiculo") return { rama: payload.slice(2) as Rama };
+  if (payload?.startsWith("m:")) {
+    const modo = payload.slice(2) as Modo;
+    return { rama: ramaDe(modo), modo };
+  }
+  return undefined;
+}
+
 /** Opciones escritas en vez de tocar el botón. */
-function opcionEscrita(texto: string): Modo | undefined {
+function opcionEscrita(texto: string): Opcion | undefined {
   const t = normalizeText(texto);
-  if (/^(por dni|dni|chofer|choferes|persona)$/.test(t)) return "chofer";
-  if (/^(por dominio|dominio|patente|vehiculo|camion|unidad)$/.test(t)) return "dominio";
-  if (/^(vtv|consulta vtv)$/.test(t)) return "vtv";
-  if (/^(seguro|consulta seguro|poliza)$/.test(t)) return "seguro";
+  if (/^(habilitacion|consulta habilitacion|credencial|vencimiento|vencimientos)$/.test(t)) return { rama: "habilitacion" };
+  if (/^(vtv y seguro|consulta vtv y seguro|comprobantes)$/.test(t)) return { rama: "vehiculo" };
+  if (/^(por dni|dni|chofer|choferes|persona)$/.test(t)) return { rama: "habilitacion", modo: "chofer" };
+  if (/^(por dominio|dominio|patente|vehiculo|camion|unidad)$/.test(t)) return { rama: "habilitacion", modo: "dominio" };
+  if (/^(vtv|consulta vtv)$/.test(t)) return { rama: "vehiculo", modo: "vtv" };
+  if (/^(seguro|consulta seguro|poliza)$/.test(t)) return { rama: "vehiculo", modo: "seguro" };
   return undefined;
 }
 
@@ -70,18 +89,19 @@ export class ConsultaFlow {
 
     // --- Botones y comandos ---
     if (payload === "menu") {
-      // De cero: se olvidan DNI, dominio, cliente y subcliente (se vuelve a pedir la planta).
+      // Vuelve al inicio: se olvidan DNI, dominio, cliente y subcliente.
       session.consulta = { saludado: true };
-      return this.pedirCliente(session.consulta, clientes, emit);
+      return this.menuPrincipal(emit);
     }
     if (payload === "consulta") {
-      // Otra consulta en la MISMA planta.
+      // Otro DNI o dominio en la MISMA planta.
+      st.rama = "habilitacion";
       st.modo = undefined;
       st.ultimos = undefined;
       return this.retomar(st, clientes, emit);
     }
     if (payload === "carnet") return this.enviarCarnet(st, emit);
-    if (payload === "nocarnet") return this.algoMas(emit, FIN_CONSULTA);
+    if (payload === "nocarnet") return this.algoMas(emit, CONSULTA.algoMas, FIN_CONSULTA);
     if (payload === "otrodoc") return this.enviarOtroDoc(session, st, emit);
 
     // Este número no recibe archivos (sólo los cargadores).
@@ -90,30 +110,35 @@ export class ConsultaFlow {
       if (!msg.text.trim()) return this.retomar(st, clientes, emit);
     }
 
-    // --- 1. Primero la planta: cliente y subcliente, antes del menú ---
+    const opcion = opcionDeBoton(payload) ?? opcionEscrita(msg.text);
+    if (opcion) return this.ir(st, opcion, clientes, emit);
+
+    // --- Menú principal: hasta elegir una rama no se toma nada más ---
+    if (!st.rama) return this.menuPrincipal(emit);
+
+    // --- Rama VTV y seguro ---
+    if (st.rama === "vehiculo") {
+      if (!st.modo) return this.retomar(st, clientes, emit);
+      return this.pasoDocumento(session, st, st.modo as Doc, msg.text, emit);
+    }
+
+    // --- Rama habilitación: primero la planta ---
     const destino = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
     if (!destino.cliente || !destino.planta) return this.pasoPlanta(st, msg, payload, clientes, emit);
-
-    // --- 2. Con la planta elegida: menú de consultas ---
-    const elegido = payload?.startsWith("m:") ? (payload.slice(2) as Modo) : opcionEscrita(msg.text);
-    if (elegido) return this.elegir(st, elegido, clientes, emit);
-
     if (!st.modo) {
       const dni = findDniInText(msg.text);
       const patente = dni ? undefined : findPatenteInText(msg.text);
       if (dni || patente) {
-        // DNI o patente escritos sin tocar el menú: se consulta la credencial en la planta elegida.
+        // DNI o patente escritos sin tocar [Por DNI] / [Por dominio]: se consulta igual.
         st.modo = dni ? "chofer" : "dominio";
         st.pendiente = { tipo: st.modo, identificador: (dni ?? patente)! };
       } else {
-        // Puede estar cambiando de planta ("y en vista?"); si no, se repite el menú.
+        // Puede estar cambiando de planta ("y en vista?"); si no, se repiten las opciones.
         this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
         return this.retomar(st, clientes, emit);
       }
     }
-
-    if (st.modo === "vtv" || st.modo === "seguro") return this.pasoDocumento(session, st, st.modo, msg.text, emit);
-    return this.pasoCredencial(st, st.modo, msg, payload, clientes, emit);
+    return this.pasoCredencial(st, st.modo as TipoRegistro, msg, payload, clientes, emit);
   }
 
   /**
@@ -138,41 +163,60 @@ export class ConsultaFlow {
     return emit({ kind: "buttons", text: CONSULTA.menuPrincipal, buttons: MENU_PRINCIPAL });
   }
 
-  private async elegir(st: ConsultaState, modo: Modo, clientes: Cliente[], emit: Emit): Promise<void> {
-    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    if (!cliente || !planta) return this.pedirCliente(st, clientes, emit);
-    st.modo = modo;
+  /** Eligió una rama (y quizás una opción dentro de ella). */
+  private ir(st: ConsultaState, opcion: Opcion, clientes: Cliente[], emit: Emit): Promise<void> {
+    if (st.rama !== opcion.rama) {
+      st.rama = opcion.rama;
+      st.modo = undefined;
+      st.pendiente = undefined;
+      st.ultimos = undefined;
+    }
+    if (opcion.modo) return this.elegir(st, opcion.modo, clientes, emit);
+    st.modo = undefined;
+    return this.retomar(st, clientes, emit);
+  }
+
+  private elegir(st: ConsultaState, modo: Modo, clientes: Cliente[], emit: Emit): Promise<void> {
     st.pendiente = undefined;
     st.ultimos = undefined;
     st.ultimoDominio = undefined;
     st.otroOfrecido = undefined;
-    if (modo === "vtv" || modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(modo) });
+    if (modo === "vtv" || modo === "seguro") {
+      st.modo = modo;
+      return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(modo) });
+    }
+    // Habilitación: sin planta todavía, se pide primero (y después se muestran las opciones).
+    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    if (!cliente || !planta) return this.retomar(st, clientes, emit);
+    st.modo = modo;
     return this.pedirIdentificador(modo, etiqueta(cliente, planta), emit);
   }
 
-  /** Retoma el paso en el que estaba (tras un aviso, o con [🔎 Consulta]). */
+  /** Repite la pregunta del paso en el que está (tras un aviso, con [🔎 Consulta], etc.). */
   private retomar(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> {
+    if (!st.rama) return this.menuPrincipal(emit);
+    if (st.rama === "vehiculo") {
+      if (st.modo === "vtv" || st.modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(st.modo) });
+      return emit({ kind: "buttons", text: CONSULTA.menuVehiculo, buttons: MENU_VEHICULO });
+    }
     const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    if (!cliente || !planta) return cliente ? this.pedirPlanta(cliente, emit) : this.pedirCliente(st, clientes, emit);
-    if (!st.modo) return this.menuDePlanta(etiqueta(cliente, planta), emit);
-    if (st.modo === "vtv" || st.modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(st.modo) });
-    return this.elegir(st, st.modo, clientes, emit);
+    if (!cliente) return this.pedirCliente(st, clientes, emit);
+    if (!planta) return this.pedirPlanta(cliente, emit);
+    if (st.modo === "chofer" || st.modo === "dominio") return this.pedirIdentificador(st.modo, etiqueta(cliente, planta), emit);
+    return this.menuHabilitacion(etiqueta(cliente, planta), emit);
   }
 
-  private menuDePlanta(destino: string, emit: Emit): Promise<void> {
-    return emit({ kind: "buttons", text: CONSULTA.destinoOk(destino), buttons: MENU_PRINCIPAL });
+  private menuHabilitacion(destino: string, emit: Emit): Promise<void> {
+    return emit({ kind: "buttons", text: CONSULTA.menuHabilitacion(destino), buttons: MENU_HABILITACION });
   }
 
-  /**
-   * Primer paso de toda consulta: cliente y subcliente. Hasta tenerlos no se
-   * muestra el menú (un DNI o una opción escritos antes no se toman).
-   */
+  /** Habilitación, primer paso: cliente y subcliente (hasta tenerlos no se toma un DNI). */
   private async pasoPlanta(st: ConsultaState, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
     const cambio = this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
     const { cliente } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
     if (!cliente) {
       const texto = msg.text.trim();
-      const esOtraCosa = texto && !cambio.reconocio && !this.esSaludo(texto) && !findDniInText(texto) && !findPatenteInText(texto) && !opcionEscrita(texto);
+      const esOtraCosa = texto && !cambio.reconocio && !this.esSaludo(texto) && !findDniInText(texto) && !findPatenteInText(texto);
       // "No encontré ese cliente" sólo si ya se le había pedido y escribió otra cosa.
       if (st.pidioPlanta && esOtraCosa) await emit({ kind: "text", text: CONSULTA.clienteNoEncontrado(clientes.map((c) => nombreCorto(c.nombre))), sinPie: true });
       return this.pedirCliente(st, clientes, emit);
@@ -185,8 +229,7 @@ export class ConsultaFlow {
       }
       if (!st.plantaCodigo) return this.pedirPlanta(cliente, emit);
     }
-    const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    return this.menuDePlanta(etiqueta(b.cliente, b.planta), emit);
+    return this.retomar(st, clientes, emit);
   }
 
   // --- VTV y seguro (sólo por dominio) ----------------------------------------------
@@ -212,9 +255,9 @@ export class ConsultaFlow {
 
   private async enviarOtroDoc(session: Session, st: ConsultaState, emit: Emit): Promise<void> {
     const doc = st.modo === "vtv" || st.modo === "seguro" ? otroDoc(st.modo) : undefined;
-    if (!doc || !st.ultimoDominio) return this.menuPrincipal(emit);
+    if (!doc || !st.ultimoDominio) return this.retomar(st, [], emit);
     await this.enviarDoc(session, doc, st.ultimoDominio, emit);
-    return this.algoMas(emit, PIE);
+    return this.algoMas(emit, CONSULTA.algoMasVehiculo, PIE);
   }
 
   /**
@@ -389,7 +432,7 @@ export class ConsultaFlow {
   /** Manda el carnet de la ÚLTIMA consulta, con el ID que vino en ella (nunca otro DNI). */
   private async enviarCarnet(st: ConsultaState, emit: Emit): Promise<void> {
     const c = st.ultimos?.[0];
-    if (!c || c.seawhiteId === null) return this.algoMas(emit, FIN_CONSULTA);
+    if (!c || c.seawhiteId === null) return this.algoMas(emit, CONSULTA.algoMas, FIN_CONSULTA);
     try {
       const pdf = await this.deps.seawhite.descargarPdf(c.tipo, c.seawhiteId);
       await emit({ kind: "file", filename: `${c.identificador}.pdf`, data: pdf, caption: `📄 Carnet – ${c.etiqueta}` });
@@ -397,11 +440,11 @@ export class ConsultaFlow {
       this.deps.logger.error({ err }, "No se pudo traer el PDF del carnet");
       await emit({ kind: "text", text: CONSULTA.carnetNoDisponible, sinPie: true });
     }
-    return this.algoMas(emit, FIN_CONSULTA);
+    return this.algoMas(emit, CONSULTA.algoMas, FIN_CONSULTA);
   }
 
-  /** "¿Necesitás algo más? Para consultar otro DNI o dominio, tocá Menú." */
-  private algoMas(emit: Emit, botones: ButtonSpec[]): Promise<void> {
-    return emit({ kind: "buttons", text: CONSULTA.algoMas, buttons: botones });
+  /** "¿Necesitás algo más?" con cómo seguir en cada rama. */
+  private algoMas(emit: Emit, texto: string, botones: ButtonSpec[]): Promise<void> {
+    return emit({ kind: "buttons", text: texto, buttons: botones });
   }
 }
