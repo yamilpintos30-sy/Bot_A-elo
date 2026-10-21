@@ -17,6 +17,7 @@ import { SupabaseFallas } from "./storage/fallas.js";
 import { SupabaseRegistro } from "./storage/registro.js";
 import { SupabaseMessageLog, SupabaseSessions } from "./storage/sessions.js";
 import { createSupabase } from "./storage/supabase.js";
+import { configurarConsumo } from "./storage/consumo.js";
 import { logger, type Logger } from "./utils/logger.js";
 
 export interface Container {
@@ -54,6 +55,8 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
   });
 
   // Un solo cliente de Claude para separar carnets y verificar comprobantes.
+  // Consumo de Claude (pestaña Costos del panel): una fila por llamada en anelo_consumo.
+  configurarConsumo(supabase, logger);
   const claude = new ClaudeRunner(config.ANTHROPIC_API_KEY, logger, config.CLAUDE_FALLBACKS);
 
   const deps: BotDeps = {

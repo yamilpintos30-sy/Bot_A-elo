@@ -10,6 +10,7 @@
  * - Acumula el uso de tokens para informar el costo de cada procesamiento.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { registrarConsumo } from "../storage/consumo.js";
 import type { Logger } from "../utils/logger.js";
 
 export type BetaParams = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
@@ -58,14 +59,15 @@ export class ClaudeRunner {
     this.fallbacksAvailable = useFallbacks;
   }
 
-  /** Ejecuta un pedido y suma su uso a `usage`. */
-  async run(params: BetaParams, usage: UsageTotals): Promise<BetaMessage> {
+  /** Ejecuta un pedido, suma su uso a `usage` y lo anota como consumo de `funcion` (pestaña Costos del panel). */
+  async run(params: BetaParams, usage: UsageTotals, funcion = "otro"): Promise<BetaMessage> {
     const withFallbacks = this.fallbacksAvailable;
     const full: BetaParams = withFallbacks
       ? { ...params, betas: [...(params.betas ?? []), "server-side-fallback-2026-07-01"], fallbacks: "default" }
       : params;
     try {
       const message = await this.client.beta.messages.stream(full).finalMessage();
+      registrarConsumo(funcion, message.model, message.usage);
       usage.requests += 1;
       usage.inputTokens += message.usage.input_tokens;
       usage.outputTokens += message.usage.output_tokens;

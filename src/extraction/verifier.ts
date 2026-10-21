@@ -59,6 +59,7 @@ export class CarnetVerifier {
           messages: [{ role: "user", content: content as never }],
         },
         usage,
+        "carga: verificar datos",
       );
 
       const text = message.content

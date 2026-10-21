@@ -90,6 +90,7 @@ export class CarnetExtractor {
             ...(containerId ? { container: containerId } : {}),
           },
           usage,
+          "carga: separar carnets (sandbox)",
         );
         responses.push(response);
         containerId = response.container?.id ?? containerId;

@@ -128,6 +128,7 @@ export class LectorListados {
           messages: [{ role: "user", content: [imagen(png), { type: "text", text: CLASIFICACION_PROMPT }] }],
         },
         usage,
+        "carga: reconocer el documento",
       );
       const r = z.object({ clase: z.enum(["carnets", "listado"]) }).safeParse(json(msg));
       return r.success ? r.data.clase : "carnets";
@@ -177,6 +178,7 @@ export class LectorListados {
             messages: [{ role: "user", content: content as never }],
           },
           usage,
+          "carga: leer listado",
         );
         const r = lecturaSchema.safeParse(json(msg));
         if (!r.success) throw new ExtractionError(`La lectura del listado devolvió un formato inesperado: ${r.error.message}`);

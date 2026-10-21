@@ -85,6 +85,7 @@ export class VerificadorComprobantes {
           ],
         },
         emptyUsage(),
+        "consulta: resguardo VTV/seguro",
       );
       const texto = message.content
         .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
