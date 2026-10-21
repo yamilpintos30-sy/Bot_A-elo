@@ -14,7 +14,7 @@ export interface Resolucion {
   planta?: Planta;
 }
 
-/** Nombre "de uso" de un cliente: sin "(PRUEBA)", "S.A.", etc. */
+/** Nombre "de uso" de un cliente: sin aclaraciones entre paréntesis, "S.A.", etc. */
 function nombreBase(nombre: string): string {
   return normalizeText(nombre.replace(/\(.*?\)/g, " "))
     .replace(/\b(s a u|s a|sa|sau|srl|sucursal argentina|argentina)\b/g, " ")
@@ -171,14 +171,14 @@ export function resolver(texto: string, clientes: Cliente[]): Resolucion {
   return cliente ? { cliente, planta: resolverPlanta(texto, cliente) } : {};
 }
 
-/** "TOTAL AUSTRAL (PRUEBA) – Planta 1" */
+/** "TOTAL AUSTRAL – Planta 1" */
 export function etiqueta(cliente: Cliente | undefined, planta: Planta | undefined, clienteCodigo?: string, plantaCodigo?: string): string {
   const c = cliente?.nombre ?? `Cliente ${clienteCodigo ?? "?"}`;
   const p = planta?.nombre ?? `Planta ${plantaCodigo ?? "?"}`;
   return `${c} – ${p}`;
 }
 
-/** Nombre corto para botones ("TOTAL AUSTRAL (PRUEBA)" -> "Total Austral"). */
+/** Nombre corto para botones ("TOTAL AUSTRAL S.A." -> "Total Austral"). */
 export function nombreCorto(nombre: string): string {
   return nombreBase(nombre)
     .split(" ")

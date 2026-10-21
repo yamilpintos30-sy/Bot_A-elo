@@ -29,14 +29,14 @@ const HOY = new Date("2026-10-15T12:00:00-03:00");
 const CLIENTES: Cliente[] = [
   {
     codigo: "999991",
-    nombre: "TOTAL AUSTRAL (PRUEBA)",
+    nombre: "TOTAL AUSTRAL",
     alias: ["total", "total austral"],
     plantas: [
       { codigo: "000001", nombre: "Planta 1", alias: ["p1"] },
       { codigo: "000002", nombre: "Planta 2", alias: [] },
     ],
   },
-  { codigo: "999992", nombre: "VISTA ENERGY (PRUEBA)", alias: ["vista"], plantas: [{ codigo: "000001", nombre: "Planta 1", alias: [] }] },
+  { codigo: "999992", nombre: "VISTA ENERGY", alias: ["vista"], plantas: [{ codigo: "000001", nombre: "Planta 1", alias: [] }] },
 ];
 
 /** SEA WHITE falso: guarda lo cargado y responde consultas como la API real. */
@@ -186,7 +186,7 @@ describe("cargador", () => {
     expect(texts(outs)).toMatch(/Carga de \*choferes\*.*Indicá \*cliente y subcliente\*/s);
 
     outs = await say(CARGADOR, "Total planta 1");
-    expect(texts(outs)).toMatch(/✅ Cliente y subcliente encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(texts(outs)).toMatch(/✅ Cliente y subcliente encontrados: \*TOTAL AUSTRAL – Planta 1\*/);
     expect(texts(outs)).toMatch(/Mandá el PDF \(o las fotos\) con los carnets de personas/);
 
     outs = await say(CARGADOR, "", [pdfAdj()]);
@@ -254,7 +254,7 @@ describe("cargador", () => {
     expect(texts(outs)).toMatch(/Quisiste decir \*Total Austral – Planta 1\*/);
     expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
     outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados: \*TOTAL AUSTRAL – Planta 1\*/);
     outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(procesar).toHaveBeenCalledTimes(1);
   });
@@ -266,7 +266,7 @@ describe("cargador", () => {
     let outs = await say(CARGADOR, "✏️ No");
     expect(texts(outs)).toMatch(/escribí de nuevo \*cliente y subcliente\*/);
     outs = await say(CARGADOR, "Total planta 2");
-    expect(texts(outs)).toMatch(/encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
+    expect(texts(outs)).toMatch(/encontrados: \*TOTAL AUSTRAL – Planta 2\*/);
   });
 
   it("no adivina: algo que no se parece a ningún cliente no sugiere nada", async () => {
@@ -474,7 +474,7 @@ describe("chofer", () => {
     expect(texts(outs) + buttons(outs).join()).not.toMatch(/Total Austral|Vista Energy/); // sin opciones
 
     outs = await say(CHOFER, "Total planta 1");
-    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*.*DNI.*dominio/s);
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL – Planta 1\*.*DNI.*dominio/s);
     expect(buttons(outs)).toEqual(MENU_HAB);
 
     outs = await say(CHOFER, "🪪 Por DNI");
@@ -483,7 +483,7 @@ describe("chofer", () => {
     outs = await say(CHOFER, "33.615.617");
     const t = texts(outs);
     expect(t).toMatch(/PERSONA 33615617/);
-    expect(t).toMatch(/TOTAL AUSTRAL \(PRUEBA\) – Planta 1: ⚠️ habilitado hasta 18\/10\/2026 \(vence en 3 días\)/);
+    expect(t).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026 \(vence en 3 días\)/);
     expect(t).toMatch(/Licencia: ✅ 10\/03\/2027/);
     expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "No, gracias"]);
 
@@ -505,7 +505,7 @@ describe("chofer", () => {
     expect(buttons(outs)).toEqual(FIN_CONSULTA);
 
     outs = await say(CHOFER, "🔎 Consulta");
-    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL – Planta 1\*/);
     expect(buttons(outs)).toEqual(MENU_HAB);
 
     outs = await say(CHOFER, "🚛 Por dominio"); // misma planta: va directo a la patente
@@ -606,7 +606,7 @@ describe("chofer", () => {
     await enPlanta(say, "Total planta 2");
     await say(CHOFER, "🪪 Por DNI");
     const outs = await say(CHOFER, "33615617");
-    expect(texts(outs)).toMatch(/No tenés credencial cargada para \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
+    expect(texts(outs)).toMatch(/No tenés credencial cargada para \*TOTAL AUSTRAL – Planta 2\*/);
     expect(buttons(outs)).toEqual(FIN_CONSULTA);
   });
 
@@ -618,13 +618,13 @@ describe("chofer", () => {
     expect(texts(outs)).toMatch(/Qué subcliente \(planta\) de \*Total Austral\*/);
     expect(buttons(outs)).not.toContain("Planta 1");
     outs = await say(CHOFER, "Planta 2");
-    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL – Planta 2\*/);
     expect(buttons(outs)).toEqual(MENU_HAB);
 
     await say(CHOFER, "Menú 😊");
     await say(CHOFER, "🪪 Habilitación");
     outs = await say(CHOFER, "vista");
-    expect(texts(outs)).toMatch(/✅ \*VISTA ENERGY \(PRUEBA\) – Planta 1\*/);
+    expect(texts(outs)).toMatch(/✅ \*VISTA ENERGY – Planta 1\*/);
   });
 
   it("cliente o subcliente inexistentes: lo dice sin listar opciones", async () => {
@@ -647,7 +647,7 @@ describe("chofer", () => {
     expect(texts(outs)).toMatch(/Quisiste decir \*Total Austral – Planta 1\*/);
     expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
     outs = await say(CHOFER, "si");
-    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL – Planta 1\*/);
     expect(buttons(outs)).toEqual(MENU_HAB);
   });
 

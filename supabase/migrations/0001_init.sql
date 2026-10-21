@@ -160,8 +160,8 @@ alter table public.anelo_carnets            enable row level security;
 -- Códigos 9999xx: nunca se confunden con un cliente real (en SEA WHITE no hay
 -- ambiente de prueba; si el ingeniero quiere limpiar, borra todo lo 9999xx).
 insert into public.anelo_clientes (codigo, nombre, alias) values
-  ('999991', 'TOTAL AUSTRAL (PRUEBA)', array['total', 'total austral']),
-  ('999992', 'VISTA ENERGY (PRUEBA)',  array['vista', 'vista energy'])
+  ('999991', 'TOTAL AUSTRAL', array['total', 'total austral']),
+  ('999992', 'VISTA ENERGY',           array['vista', 'vista energy'])
 on conflict (codigo) do nothing;
 
 insert into public.anelo_plantas (cliente_id, codigo, nombre, alias)
