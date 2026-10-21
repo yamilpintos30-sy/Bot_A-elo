@@ -18,6 +18,8 @@ import type { CarnetManifest, Manifest, VerificacionDocumento } from "./manifest
 
 /** Tope por carnet: el sandbox apunta a <300 KB; esto es la red de seguridad. */
 export const MAX_PDF_BYTES = 1_500_000;
+/** En un listado cada registro lleva el documento COMPLETO (la constancia): se admite más. */
+export const MAX_LISTADO_BYTES = 10_000_000;
 
 export interface CarnetListo {
   tipo: TipoRegistro;
@@ -78,8 +80,9 @@ export function reviewCarnets(input: ReviewInput): ReviewResult {
       rechazar("El archivo generado no es un PDF válido.");
       continue;
     }
-    if (pdf.length > MAX_PDF_BYTES) {
-      rechazar(`El PDF recortado pesa demasiado (${Math.round(pdf.length / 1024)} KB).`);
+    const tope = manifest.modo === "listado" ? MAX_LISTADO_BYTES : MAX_PDF_BYTES;
+    if (pdf.length > tope) {
+      rechazar(`El PDF pesa demasiado (${Math.round(pdf.length / 1024)} KB).`);
       continue;
     }
 

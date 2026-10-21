@@ -131,6 +131,14 @@ describe("revisión final", () => {
     expect(r.rechazados).toHaveLength(1); // dígito verificador inválido: no se adivina el DNI
   });
 
+  it("tamaño: un carnet recortado de 2 MB se rechaza; un listado completo de 2 MB se acepta", () => {
+    const grande = Buffer.concat([PDF, Buffer.alloc(2_000_000)]);
+    const carnets = run({ carnets: [carnet("a.pdf", "33615617", "18-10-2026")], descartados: [] }, { "a.pdf": verif("33615617", "18-10-2026") }, { "a.pdf": grande });
+    expect(carnets.rechazados[0]!.motivo).toMatch(/pesa demasiado/);
+    const listado = run({ modo: "listado", carnets: [carnet("a.pdf", "33615617", "18-10-2026")], descartados: [] }, { "a.pdf": verif("33615617", "18-10-2026") }, { "a.pdf": grande });
+    expect(listado.aceptados).toHaveLength(1);
+  });
+
   it("rechaza si la verificación lee otro DNI, otra fecha o más de un carnet", () => {
     const r = run(
       {
