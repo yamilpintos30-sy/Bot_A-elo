@@ -85,7 +85,7 @@ export const CARGA = {
   formatoNoSoportado: (archivo: string) => `❌ "${archivo}" no es un PDF ni una foto JPG o PNG. Mandá el PDF o una foto del carnet.`,
   verificando: "🔎 Carnets separados. Estoy verificando los datos de cada uno.",
   verificandoListado:
-    "📋 Es un listado de estado, no tiene carnet individual: cada persona o vehículo se va a subir con el documento completo y su fila marcada, como constancia. Estoy verificando los datos de cada uno.",
+    "📋 Es un listado de estado: cada uno se sube con el documento completo y su fila marcada. Verificando…",
   sigue: "⏳ Sigue en proceso, aguardá un momento por favor.",
   noDescarga: "❌ No pude descargar el archivo. Mandalo de nuevo.",
   falloProceso: (motivo: string) => `❌ No pude procesar el PDF: ${motivo}\nMandalo de nuevo.`,
@@ -100,12 +100,11 @@ export const CARGA = {
 
 /** Filtro de tipo: el PDF trae carnets del tipo elegido y también del otro. */
 export function avisoTipoMezclado(elegido: "chofer" | "dominio", otros: CarnetListo[]): string {
-  const otro = elegido === "chofer" ? "dominio" : "chofer";
-  const que = (t: "chofer" | "dominio") => (t === "chofer" ? "personas" : "vehículos");
-  return [
-    `⚠️ En este documento hay ${que(elegido)} y ${que(otro)}: solo se subirán ${elegido === "chofer" ? "las personas" : "los vehículos"} (*${TIPO[elegido].plural}*).`,
-    `Para subir ${elegido === "chofer" ? "los vehículos" : "las personas"} (${otros.length}), al terminar vas a tener un botón.`,
-  ].join("\n");
+  // "⚠️ También hay 8 personas: ahora van solo los vehículos. Al terminar te ofrezco cargarlas."
+  const n = otros.length;
+  return elegido === "dominio"
+    ? `⚠️ También hay ${n} persona${n === 1 ? "" : "s"}: ahora van solo los vehículos. Al terminar te ofrezco cargarla${n === 1 ? "" : "s"}.`
+    : `⚠️ También hay ${n} vehículo${n === 1 ? "" : "s"}: ahora van solo las personas. Al terminar te ofrezco cargarlo${n === 1 ? "" : "s"}.`;
 }
 
 /** Después de cargar un tipo, ofrecer el otro tipo del MISMO documento. */

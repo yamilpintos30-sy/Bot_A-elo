@@ -301,7 +301,7 @@ describe("cargador", () => {
     await say(CARGADOR, "👤 Choferes");
     await say(CARGADOR, "Total planta 1");
     let outs = await say(CARGADOR, "", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/hay personas y vehículos: solo se subirán las personas/);
+    expect(texts(outs)).toMatch(/⚠️ También hay 1 vehículo: ahora van solo las personas\. Al terminar te ofrezco cargarlo\./);
     expect(texts(outs)).toMatch(/1 listo para cargar \(1 persona\)/);
     outs = await say(CARGADOR, "Confirmar carga");
     expect(seawhite.cargas.map((c) => [c.tipo, c.registros.map((r) => r.identificador)])).toEqual([["chofer", ["33615617"]]]);
@@ -319,6 +319,26 @@ describe("cargador", () => {
     expect(buttons(outs)).not.toContain("👤 Cargar choferes");
   });
 
+  it("LISTADO mezclado: los dos avisos salen igual eligiendo Choferes o Dominios", async () => {
+    for (const [boton, aviso] of [
+      ["👤 Choferes", /También hay 1 vehículo: ahora van solo las personas/],
+      ["🚛 Dominios", /También hay 1 persona: ahora van solo los vehículos\. Al terminar te ofrezco cargarla\./],
+    ] as const) {
+      const { say } = setup({
+        procesar: async (_pdf, _f, onEtapa) => {
+          await onEtapa?.("verificando", "listado");
+          const r = resultado([carnet("33919536", "31-10-2026"), carnet("AG105UX", "12-03-2027", { tipo: "dominio", apellidoNombre: null })]);
+          return { ...r, manifest: { modo: "listado", carnets: [], descartados: [] } };
+        },
+      });
+      await say(CARGADOR, boton);
+      await say(CARGADOR, "Total planta 1");
+      const t = texts(await say(CARGADOR, "", [pdfAdj("PAE SLB - Estatus.pdf")]));
+      expect(t).toMatch(/📋 Es un listado de estado/);
+      expect(t).toMatch(aviso);
+    }
+  });
+
   it("LISTADO de estado: avisa que no tiene carnet individual y habla de registros", async () => {
     const { say, seawhite } = setup({
       procesar: async (_pdf, _f, onEtapa) => {
@@ -332,7 +352,8 @@ describe("cargador", () => {
     await say(CARGADOR, "Total planta 1");
     let outs = await say(CARGADOR, "", [pdfAdj("PAE SLB - Estatus.pdf")]);
     expect(texts(outs)).toMatch(/Estoy procesando el documento/);
-    expect(texts(outs)).toMatch(/Es un listado de estado, no tiene carnet individual.*fila marcada/s);
+    expect(texts(outs)).toMatch(/📋 Es un listado de estado: cada uno se sube con el documento completo y su fila marcada/);
+    expect(texts(outs)).toMatch(/⚠️ También hay 1 vehículo: ahora van solo las personas/);
     expect(texts(outs)).not.toMatch(/Carnets separados/);
     outs = await say(CARGADOR, "Confirmar carga");
     expect(texts(outs)).toMatch(/Guardando 1 registro en el sistema/);
