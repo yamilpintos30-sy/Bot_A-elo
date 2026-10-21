@@ -231,8 +231,12 @@ export class ConsultaFlow {
     }
     st.ultimoDominio = patente;
     st.otroOfrecido = false;
-    await this.enviarDoc(session, doc, patente, emit);
-    // Se ofrece el otro comprobante del mismo vehículo.
+    const resultado = await this.enviarDoc(session, doc, patente, emit);
+    // No lo encontró: que revise la patente (sigue esperando otra). No se ofrece el otro comprobante.
+    if (resultado === "no_encontrado") return emit({ kind: "text", text: CONSULTA.revisarPatente });
+    // Estaba pero no se pudo entregar: tampoco se ofrece el otro.
+    if (resultado !== "enviado") return this.algoMas(emit, CONSULTA.algoMasVehiculo, PIE);
+    // Recién con el comprobante entregado se ofrece el otro del mismo vehículo.
     st.otroOfrecido = true;
     const otro = otroDoc(doc);
     return emit({
@@ -254,11 +258,14 @@ export class ConsultaFlow {
    * patente pedida, la del nombre del archivo y la de adentro del PDF son la
    * misma. Si no, responde que no está disponible y registra una falla crítica.
    */
-  private async enviarDoc(session: Session, doc: Doc, dominio: string, emit: Emit): Promise<void> {
+  private async enviarDoc(session: Session, doc: Doc, dominio: string, emit: Emit): Promise<"enviado" | "no_encontrado" | "no_disponible"> {
     try {
       await emit({ kind: "text", text: CONSULTA.buscandoDoc(doc, dominio), sinPie: true });
       const encontrado = await this.deps.seawhite.documentoVehiculo(doc, dominio);
-      if (!encontrado) return emit({ kind: "text", text: CONSULTA.docNoEncontrado(doc, dominio), sinPie: true });
+      if (!encontrado) {
+        await emit({ kind: "text", text: CONSULTA.docNoEncontrado(doc, dominio), sinPie: true });
+        return "no_encontrado";
+      }
 
       const v = await this.deps.verificador.verificar(encontrado.pdf, doc, dominio, encontrado.nombreArchivo);
       if (!v.ok) {
@@ -271,13 +278,16 @@ export class ConsultaFlow {
           telefono: session.phone,
           detalle: { documento: doc, ...v },
         });
-        return emit({ kind: "text", text: CONSULTA.docNoVerificado(doc, dominio), sinPie: true });
+        await emit({ kind: "text", text: CONSULTA.docNoVerificado(doc, dominio), sinPie: true });
+        return "no_disponible";
       }
       // El canal espera que WhatsApp entregue el PDF antes de mandar lo siguiente.
-      return emit({ kind: "file", filename: `${doc.toUpperCase()}_${dominio}.pdf`, data: encontrado.pdf, caption: CONSULTA.docCaption(doc, dominio) });
+      await emit({ kind: "file", filename: `${doc.toUpperCase()}_${dominio}.pdf`, data: encontrado.pdf, caption: CONSULTA.docCaption(doc, dominio) });
+      return "enviado";
     } catch (err) {
       this.deps.logger.error({ err }, "No se pudo traer el comprobante del vehículo");
-      return emit({ kind: "text", text: CONSULTA.docNoDisponible, sinPie: true });
+      await emit({ kind: "text", text: CONSULTA.docNoDisponible, sinPie: true });
+      return "no_disponible";
     }
   }
 

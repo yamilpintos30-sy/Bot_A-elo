@@ -752,15 +752,27 @@ describe("chofer", () => {
     expect(buttons(outs)).toEqual(["Menú 😊", "Eso es todo, gracias"]);
   });
 
-  it("Seguro que no existe: lo dice y ofrece la VTV (que sí está)", async () => {
+  it("NO ENCONTRADO: no ofrece el otro comprobante; pide revisar la patente y sigue esperando otra", async () => {
     const { say } = setup();
     await enVehiculo(say, "🛡️ Seguro");
-    let outs = await say(CHOFER, "AG536VG");
+    let outs = await say(CHOFER, "AG536VG"); // no tiene seguro cargado
     expect(texts(outs)).toMatch(/No encontré el seguro del dominio \*AG536VG\*/);
+    expect(texts(outs)).toMatch(/Revisá la patente y escribila de nuevo/);
+    expect(texts(outs)).not.toMatch(/Querés también/);
+    expect(buttons(outs)).not.toContain("📄 Sí, la VTV");
     expect(outs.some((o) => o.kind === "file")).toBe(false);
-    expect(buttons(outs)).toEqual(["📄 Sí, la VTV", "Menú 😊", "Eso es todo, gracias"]);
-    outs = await say(CHOFER, "📄 Sí, la VTV");
-    expect(outs.find((o) => o.kind === "file")).toMatchObject({ filename: "VTV_AG536VG.pdf" });
+    // Sigue en Seguro: la siguiente patente se busca directo.
+    outs = await say(CHOFER, "AF498ZJ");
+    expect(outs.find((o) => o.kind === "file")).toMatchObject({ filename: "SEGURO_AF498ZJ.pdf" });
+  });
+
+  it("NO ENCONTRADO (VTV, el caso real 'Aaa222'): tampoco ofrece el seguro", async () => {
+    const { say } = setup();
+    await enVehiculo(say, "📄 VTV");
+    const outs = await say(CHOFER, "Aaa222");
+    expect(texts(outs)).toMatch(/No encontré la VTV del dominio \*AAA222\*\.[\s\S]*Revisá la patente/);
+    expect(texts(outs)).not.toMatch(/Querés también el \*seguro\*/);
+    expect(buttons(outs)).not.toContain("🛡️ Sí, el seguro");
   });
 
   it("RESGUARDO: si las patentes no coinciden NO manda el PDF, dice que no está disponible y registra falla crítica", async () => {
@@ -772,6 +784,7 @@ describe("chofer", () => {
     expect(fallas.fallas).toHaveLength(1);
     expect(fallas.fallas[0]).toMatchObject({ tipo: "comprobante_no_coincide", severidad: "critica", dominio: "AF498ZJ", telefono: CHOFER });
     expect(fallas.fallas[0]!.descripcion).toMatch(/VTV de AF498ZJ NO entregado: Adentro del PDF figura AG536VG/);
+    expect(texts(outs)).not.toMatch(/Querés también/); // si no se entregó, no se ofrece el otro
   });
 
   it("VTV con una patente inválida: avisa", async () => {

@@ -203,6 +203,8 @@ export const CONSULTA = {
   pedirPatenteDoc: (doc: "vtv" | "seguro") => `🚛 Pasame la *patente* (dominio) del vehículo y te mando ${doc === "vtv" ? "la *VTV*" : "el *seguro*"}. Ejemplo: AA123BB`,
   docCaption: (doc: "vtv" | "seguro", dominio: string) => `${doc === "vtv" ? "📄 VTV" : "🛡️ Seguro"} – ${dominio}`,
   docNoEncontrado: (doc: "vtv" | "seguro", dominio: string) => `❌ No encontré ${doc === "vtv" ? "la VTV" : "el seguro"} del dominio *${dominio}*.`,
+  /** Después de "no encontré": sigue esperando otra patente. */
+  revisarPatente: "Revisá la patente y escribila de nuevo.",
   docNoDisponible: "No pude traer el comprobante en este momento. Probá de nuevo en unos minutos.",
   buscandoDoc: (doc: "vtv" | "seguro", dominio: string) => `🔎 Buscando ${doc === "vtv" ? "la VTV" : "el seguro"} de *${dominio}*…`,
   /** El resguardo no lo validó: no se entrega (y queda como falla crítica en el panel). */
