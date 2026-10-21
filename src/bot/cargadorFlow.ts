@@ -190,7 +190,9 @@ export class CargadorFlow {
         buttons: [{ title: buttonTitle(`Cargar ${TIPO[otro].plural}`), payload: "cambiar" }, CANCELAR],
       });
     }
-    if (otros.length > 0) await emit({ kind: "text", text: avisoTipoMezclado(lote.tipo, otros) });
+    // Aviso del otro tipo sólo si todavía no se cargó (si ya se cargó, no hay nada que ofrecer).
+    const otroYaCargado = lote.tiposCargados?.includes(otroTipo(lote.tipo)) ?? false;
+    if (otros.length > 0 && !otroYaCargado) await emit({ kind: "text", text: avisoTipoMezclado(lote.tipo, otros) });
     return emit({ kind: "buttons", text: resumenParaConfirmar(lote.destino, delTipo, lote.resultado.rechazados), buttons: [CONFIRMAR, CANCELAR] });
   }
 
@@ -255,11 +257,15 @@ export class CargadorFlow {
       .catch((err) => this.deps.logger.warn({ err, estado }, "No se pudo cerrar el registro de la carga"));
   }
 
-  /** Botón para cargar el otro tipo del mismo documento. */
-  private ofrecerOtro(lote: LotePendiente, emit: Emit): Promise<void> {
+  /**
+   * Botón para cargar el otro tipo del mismo documento. `antes`: texto que va en
+   * el MISMO mensaje (el resultado de la carga), para que WhatsApp no los desordene.
+   */
+  private ofrecerOtro(lote: LotePendiente, emit: Emit, antes?: string): Promise<void> {
     const cantidad = lote.resultado.aceptados.filter((c) => c.tipo === lote.tipo).length;
     const boton = lote.tipo === "dominio" ? "🚛 Cargar dominios" : "👤 Cargar choferes";
-    return emit({ kind: "buttons", text: ofrecerOtroTipo(lote.tipo, cantidad, esListado(lote.resultado)), buttons: [{ title: boton, payload: "cargarotro" }, BOTON_MENU, BOTON_FIN] });
+    const pregunta = ofrecerOtroTipo(lote.tipo, cantidad, esListado(lote.resultado));
+    return emit({ kind: "buttons", text: antes ? `${antes}\n\n${pregunta}` : pregunta, buttons: [{ title: boton, payload: "cargarotro" }, BOTON_MENU, BOTON_FIN] });
   }
 
   private async confirmar(session: Session, lote: LotePendiente, emit: Emit): Promise<void> {
@@ -318,16 +324,17 @@ export class CargadorFlow {
       const siguiente: LotePendiente = { ...lote, tipo: otro, tiposCargados: cargados, cargaId: null };
       const loteId = this.deps.lotes.guardar(siguiente);
       session.cargador = { etapa: "esperando_confirmacion", tipo: otro, clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo, loteId, ofreciendoOtro: true };
-      await emit({ kind: "text", text: resultadoCarga(lote.destino, resumen), sinPie: true });
-      return this.ofrecerOtro(siguiente, emit);
+      return this.ofrecerOtro(siguiente, emit, resultadoCarga(lote.destino, resumen));
     }
     return this.conMenu(emit, resultadoCarga(lote.destino, resumen));
   }
 
-  /** Mensaje final de un paso + el menú para la próxima carga. */
+  /**
+   * Mensaje final de un paso + el menú para la próxima carga, en UN mensaje:
+   * separados, WhatsApp a veces entregaba primero la pregunta y después el resultado.
+   */
   private async conMenu(emit: Emit, texto: string): Promise<void> {
-    await emit({ kind: "text", text: texto });
-    return emit({ kind: "buttons", text: CARGA.otraCarga, buttons: MENU });
+    return emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: MENU });
   }
 }
 

@@ -348,15 +348,21 @@ describe("cargador", () => {
     // Botón para cargar los vehículos del MISMO documento (sin reprocesar).
     expect(texts(outs)).toMatch(/también tiene 1 carnets de vehículos/);
     expect(buttons(outs)).toEqual(["🚛 Cargar dominios", "Menú 😊", "Eso es todo, gracias"]);
+    // Resultado y pregunta en UN mensaje (separados, WhatsApp los desordenaba).
+    const ultimo = outs.at(-1) as Extract<Outbound, { kind: "buttons" }>;
+    expect(ultimo.text).toMatch(/Carga completada[\s\S]*también tiene 1 carnets de vehículos/);
     outs = await say(CARGADOR, "🚛 Cargar dominios");
     expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
+    // Las personas ya se cargaron: no se vuelve a avisar que "también hay personas".
+    expect(texts(outs)).not.toMatch(/También hay/);
     outs = await say(CARGADOR, "Confirmar carga");
     expect(seawhite.cargas.map((c) => [c.tipo, c.registros.map((r) => r.identificador)])).toEqual([
       ["chofer", ["33615617"]],
       ["dominio", ["AF498ZJ"]],
     ]);
-    // Ya no se ofrece nada más: vuelve al menú.
+    // Ya no se ofrece nada más: resultado + "¿Querés cargar otra documentación?" en un mensaje.
     expect(buttons(outs)).not.toContain("👤 Cargar choferes");
+    expect((outs.at(-1) as Extract<Outbound, { kind: "buttons" }>).text).toMatch(/Carga completada[\s\S]*Querés cargar otra documentación/);
   });
 
   it("LISTADO mezclado: los dos avisos salen igual eligiendo Choferes o Dominios", async () => {
