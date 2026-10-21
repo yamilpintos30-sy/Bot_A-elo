@@ -366,15 +366,18 @@ export class ConsultaFlow {
       this.deps.logger.warn({ err }, "No se pudo leer el registro de carnets");
     }
 
-    let documentacion: Documentacion | null = null;
-    try {
-      documentacion = await this.deps.seawhite.documentacion(tipo, identificador);
-    } catch (err) {
-      this.deps.logger.warn({ err }, "No se pudo consultar la documentación general");
+    // La habilitación muestra sólo el ingreso a ESA planta (sin licencia/ART/F.931
+    // ni seguro/VTV). La documentación general se consulta sólo para el nombre del chofer.
+    if (tipo === "chofer" && !nombre) {
+      try {
+        const doc: Documentacion = await this.deps.seawhite.documentacion(tipo, identificador);
+        if (doc.found && doc.tipo === "chofer") nombre = doc.nombre;
+      } catch (err) {
+        this.deps.logger.warn({ err }, "No se pudo consultar el nombre del chofer");
+      }
     }
-    nombre ??= documentacion?.found && documentacion.tipo === "chofer" ? documentacion.nombre : null;
 
-    const texto = respuestaConsulta({ tipo, identificador, nombre, plantas: linea ? [linea] : [], sinCredencialEn: linea ? undefined : destino, documentacion, hoy });
+    const texto = respuestaConsulta({ tipo, identificador, nombre, plantas: linea ? [linea] : [], sinCredencialEn: linea ? undefined : destino, hoy });
 
     if (seawhiteId === null) return emit({ kind: "buttons", text: `${texto}\n\n${CONSULTA.algoMas}`, buttons: FIN_CONSULTA });
     st.ultimos = [{ tipo, identificador, clienteCodigo, plantaCodigo, etiqueta: destino, seawhiteId }];

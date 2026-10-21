@@ -5,7 +5,7 @@
  *   - Choferes: trato de atención al público de una empresa, como Enri.
  */
 import type { CarnetListo, CarnetRechazado } from "../extraction/review.js";
-import type { Documentacion, ResumenCarga } from "../integrations/seawhite/types.js";
+import type { ResumenCarga } from "../integrations/seawhite/types.js";
 import { diffDays, parseCalendarDate, type CalendarDate } from "../utils/dates.js";
 
 // --- Formato de fechas -----------------------------------------------------------
@@ -211,10 +211,9 @@ export function respuestaConsulta(opts: {
   plantas: LineaPlanta[];
   /** Planta por la que preguntó y donde NO tiene credencial. */
   sinCredencialEn?: string;
-  documentacion: Documentacion | null;
   hoy: CalendarDate;
 }): string {
-  const { tipo, identificador, nombre, plantas, documentacion, hoy } = opts;
+  const { tipo, identificador, nombre, plantas, hoy } = opts;
   const quien = tipo === "chofer" ? `👤 *${nombre ?? "DNI"}* – DNI ${identificador}` : `🚛 Patente *${identificador}*`;
   const lineas = [quien];
 
@@ -228,15 +227,6 @@ export function respuestaConsulta(opts: {
     }
   } else if (!opts.sinCredencialEn) {
     lineas.push("", `🏭 No encontré credenciales de ingreso a planta cargadas para ${tipo === "chofer" ? "ese DNI" : "esa patente"}.`);
-  }
-
-  if (documentacion?.found) {
-    lineas.push("", "📄 *Documentación*");
-    if (documentacion.tipo === "chofer") {
-      lineas.push(`• Licencia: ${estadoFecha(documentacion.licencia, hoy)}`, `• ART: ${estadoFecha(documentacion.art, hoy)}`, `• F.931: ${estadoFecha(documentacion.f931, hoy)}`);
-    } else {
-      lineas.push(`• Seguro: ${estadoFecha(documentacion.seguro, hoy)}`, `• VTV: ${estadoFecha(documentacion.vtv, hoy)}`);
-    }
   }
   return lineas.join("\n");
 }

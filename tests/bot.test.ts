@@ -484,7 +484,7 @@ describe("chofer", () => {
     const t = texts(outs);
     expect(t).toMatch(/PERSONA 33615617/);
     expect(t).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026 \(vence en 3 días\)/);
-    expect(t).toMatch(/Licencia: ✅ 10\/03\/2027/);
+    expect(t).not.toMatch(/Documentación|Licencia|ART|F\.931/); // la habilitación muestra sólo el ingreso a planta
     expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "No, gracias"]);
 
     outs = await say(CHOFER, "📄 Sí, pasámelo");
@@ -512,6 +512,7 @@ describe("chofer", () => {
     expect(texts(outs)).toMatch(/Pasame la \*patente\*/);
     outs = await say(CHOFER, "AF498ZJ");
     expect(texts(outs)).toMatch(/Patente \*AF498ZJ\*.*Planta 1: ✅ habilitado hasta 31\/12\/2026/s);
+    expect(texts(outs)).not.toMatch(/Documentación|Seguro:|VTV:/); // sólo el ingreso a planta
 
     outs = await say(CHOFER, "Menú 😊");
     expect(buttons(outs)).toEqual(MENU);
