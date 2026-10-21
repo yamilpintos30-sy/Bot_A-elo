@@ -49,7 +49,7 @@ const LECTURA_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["recorte", "yCentro", "tipo", "identificador", "apellidoNombre", "vencimiento", "observaciones"],
+        required: ["recorte", "yCentro", "tipo", "identificador", "apellidoNombre", "vencimiento", "motivoVencimiento", "observaciones"],
         properties: {
           recorte: { type: "integer" },
           yCentro: { type: "number" },
@@ -57,6 +57,7 @@ const LECTURA_SCHEMA = {
           identificador: { type: ["string", "null"] },
           apellidoNombre: { type: ["string", "null"] },
           vencimiento: { type: ["string", "null"] },
+          motivoVencimiento: { type: ["string", "null"] },
           observaciones: { type: ["string", "null"] },
         },
       },
@@ -79,6 +80,7 @@ const lecturaSchema = z.object({
       identificador: z.string().nullable(),
       apellidoNombre: z.string().nullable(),
       vencimiento: z.string().nullable(),
+      motivoVencimiento: z.string().nullable(),
       observaciones: z.string().nullable(),
     }),
   ),
@@ -235,6 +237,7 @@ export class LectorListados {
           clienteDetectado,
           pagina,
           observaciones: fila.observaciones,
+          motivoVencimiento: fila.motivoVencimiento,
           recorte: `${archivo}.fila.png`,
         });
       }

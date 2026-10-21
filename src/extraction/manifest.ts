@@ -24,6 +24,8 @@ export const carnetManifestSchema = z.object({
   pagina: z.number().int().min(1),
   /** Datos relevantes que no se cargan pero hay que avisar (p. ej. "Inhabilitado para conducir"). */
   observaciones: z.string().nullable().optional(),
+  /** Qué documento vence en la fecha (en un listado, el "motivo de no acceso"). */
+  motivoVencimiento: z.string().nullable().optional(),
   /** Listado: imagen ampliada de la fila marcada, sólo para la verificación (no se carga). */
   recorte: z.string().nullable().optional(),
 });

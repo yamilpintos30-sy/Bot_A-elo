@@ -32,7 +32,8 @@ QUÉ GENERAR
       "vencimiento": "dd-MM-yyyy",
       "clienteDetectado": "empresa para la que se emitió la credencial o el estado",
       "pagina": número de página (desde 1),
-      "observaciones": "dato importante que haya que avisar" o null,
+      "motivoVencimiento": "qué documento vence en esa fecha" o null,
+      "observaciones": "situación anormal que haya que avisar" o null,
       "recorte": "30123456.fila.png" (sólo en un listado) o null
     }
   ],
@@ -43,7 +44,8 @@ QUÉ GENERAR
 CRITERIOS
 - vencimiento: la fecha HASTA la que el registro habilita el ingreso o el acceso a la planta. En un carnet es su vencimiento o vigencia; en un listado, la fecha asociada al estado o al próximo vencimiento que le impediría el acceso. Las fechas de emisión, impresión o habilitación para conducir no son el vencimiento. Formato dd-MM-yyyy (ejemplo: 31-12-2027).
 - clienteDetectado: la empresa o el operador PARA QUIEN se emitió la credencial o el estado, es decir, el dueño de la planta. No es la contratista a la que pertenece la persona ni la empresa de control.
-- observaciones: anotá lo que cambie si la persona o el vehículo puede trabajar (por ejemplo, que esté inhabilitado, o el motivo de no acceso que figure). Si no hay nada relevante, null.
+- motivoVencimiento: qué documento o requisito vence en esa fecha, en pocas palabras (por ejemplo, el que figure como motivo de no acceso asociado a la fecha), o null si no figura.
+- observaciones: sólo una situación ANORMAL que hoy impida o condicione el acceso (por ejemplo, un estado distinto del habilitado, o una restricción). No repitas el estado normal ni qué documento vence en la fecha (eso va en motivoVencimiento). Si no hay nada anormal, null.
 - Si el mismo DNI o la misma patente aparece más de una vez, generá un solo registro (el de vencimiento más lejano) y explicalo en "descartados".
 - Nunca inventes ni completes datos. Si un dato no se lee con seguridad, poné null o descartá el registro explicando por qué.
 
@@ -84,7 +86,8 @@ Cada fila de una tabla de personas o de vehículos es un REGISTRO. Informá TODO
 - identificador: el DNI solo con números; si sólo figura el CUIL/CUIT, el CUIL completo de 11 números (el sistema extrae el DNI); en un vehículo, la patente en mayúsculas sin espacios.
 - apellidoNombre: "APELLIDO, NOMBRE" o null si es un vehículo.
 - vencimiento: la fecha HASTA la que el registro habilita el acceso a la planta, en formato dd-MM-yyyy; en un listado suele ser la fecha asociada al estado o al próximo vencimiento que le impediría el acceso.
-- observaciones: lo que cambie si la persona o el vehículo puede trabajar (por ejemplo, que esté inhabilitado, o el motivo de no acceso que figure), o null.
+- motivoVencimiento: qué documento o requisito vence en esa fecha, en pocas palabras (por ejemplo, el que figure como motivo de no acceso asociado a la fecha), o null si no figura.
+- observaciones: sólo una situación ANORMAL que hoy impida o condicione el acceso (por ejemplo, un estado distinto del habilitado, o una restricción). No repitas el estado normal ni qué documento vence en la fecha (eso va en motivoVencimiento). Si no hay nada anormal, null.
 
 Además:
 - formato: descripción breve (emisor, qué tablas tiene).

@@ -130,10 +130,14 @@ export function resumenParaConfirmar(destino: string, aceptados: CarnetListo[], 
   const partes = [personas ? `${personas} persona${personas === 1 ? "" : "s"}` : "", vehiculos ? `${vehiculos} vehículo${vehiculos === 1 ? "" : "s"}` : ""].filter(Boolean);
   const lineas = [`📋 *${destino}*`, `✅ ${aceptados.length} listo${aceptados.length === 1 ? "" : "s"} para cargar (${partes.join(", ")})`];
 
-  const avisos = aceptados.flatMap((c) => [
-    ...(c.vencido ? [`• ${nombreCarnet(c)}: vencido el ${fecha(c.vencimiento)}`] : []),
-    ...(c.observaciones ? [`• ${nombreCarnet(c)}: ${c.observaciones}`] : []),
-  ]);
+  // Un renglón por registro y sólo lo que hay que mirar: vencido (con qué vence) o una situación anormal.
+  const avisos = aceptados.flatMap((c) => {
+    const partes = [
+      c.vencido ? `vencido el ${fecha(c.vencimiento)}${c.motivoVencimiento ? ` (${c.motivoVencimiento})` : ""}` : "",
+      c.observaciones ?? "",
+    ].filter(Boolean);
+    return partes.length ? [`• ${nombreCarnet(c)}: ${partes.join(". ")}`] : [];
+  });
   if (avisos.length) lineas.push("", "⚠️ Avisos:", ...avisos);
   if (rechazados.length) lineas.push("", `❌ ${rechazados.length} no se van a cargar:`, ...rechazados.map(lineaRechazo));
   lineas.push("", "¿Confirmás la carga?");

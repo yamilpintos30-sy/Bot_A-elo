@@ -85,6 +85,7 @@ describe("LectorListados (Claude falso)", () => {
     identificador,
     apellidoNombre: null,
     vencimiento: "31-12-2026",
+    motivoVencimiento: null,
     observaciones: null,
   });
 

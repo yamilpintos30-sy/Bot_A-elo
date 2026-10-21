@@ -90,7 +90,7 @@ class FakeSeaWhite implements SeaWhiteService {
 }
 
 function carnet(identificador: string, vencimiento: string, extra: Partial<CarnetListo> = {}): CarnetListo {
-  return { tipo: "chofer", identificador, vencimiento, apellidoNombre: `PERSONA ${identificador}`, clienteDetectado: "TOTAL", pagina: 1, observaciones: null, vencido: false, pdf: PDF, ...extra };
+  return { tipo: "chofer", identificador, vencimiento, apellidoNombre: `PERSONA ${identificador}`, clienteDetectado: "TOTAL", pagina: 1, observaciones: null, motivoVencimiento: null, vencido: false, pdf: PDF, ...extra };
 }
 
 function resultado(aceptados: CarnetListo[], rechazados: ProcesamientoResultado["rechazados"] = []): ProcesamientoResultado {
@@ -363,6 +363,24 @@ describe("cargador", () => {
     expect(texts(outs)).toMatch(/cancelada/);
     expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
     expect(seawhite.cargas).toHaveLength(0);
+  });
+
+  it("AVISOS: un renglón por registro, sólo vencidos (con qué vence) o situaciones anormales", async () => {
+    const { say } = setup({
+      procesar: async () =>
+        resultado([
+          carnet("33919536", "31-10-2026", { motivoVencimiento: "seguro ART" }), // al día: sin aviso
+          carnet("33615450", "23-09-2026", { vencido: true, motivoVencimiento: "licencia de conducir" }),
+          carnet("24157723", "29-10-2026", { observaciones: "Inhabilitado: trámite incompleto" }),
+        ]),
+    });
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "Total planta 1", [pdfAdj()]);
+    const t = texts(outs);
+    expect(t).toMatch(/• PERSONA 33615450 \(33615450\): vencido el 23\/09\/2026 \(licencia de conducir\)/);
+    expect(t).toMatch(/• PERSONA 24157723 \(24157723\): Inhabilitado: trámite incompleto/);
+    expect(t).not.toMatch(/33919536\): /); // el que está al día no aparece en avisos
+    expect(t.match(/33615450\): /g)).toHaveLength(1); // un solo renglón por persona
   });
 
   it("REGISTRO: Cancelar o 'Eso es todo' con la carga pendiente -> cancelada (no queda 'procesando')", async () => {

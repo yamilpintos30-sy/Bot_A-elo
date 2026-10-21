@@ -30,6 +30,8 @@ export interface CarnetListo {
   clienteDetectado: string | null;
   pagina: number;
   observaciones: string | null;
+  /** Qué documento vence en esa fecha (para el aviso de vencido). */
+  motivoVencimiento: string | null;
   /** true si la fecha ya pasó (se carga igual: refleja el estado real, pero se avisa). */
   vencido: boolean;
   pdf: Buffer;
@@ -123,6 +125,7 @@ export function reviewCarnets(input: ReviewInput): ReviewResult {
       clienteDetectado: c.clienteDetectado?.trim() || null,
       pagina: c.pagina,
       observaciones: c.observaciones?.trim() || null,
+      motivoVencimiento: c.motivoVencimiento?.trim() || null,
       vencido: diffDays(hoy, fecha) < 0,
       pdf,
     });
