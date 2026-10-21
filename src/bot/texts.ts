@@ -77,7 +77,9 @@ const unidad = (n: number, listado: boolean) => `${listado ? "registro" : "carne
 /** Cliente y subcliente (carga y consulta): solo texto, sin listas de opciones. */
 export const DESTINO = {
   elegirPlanta: (cliente: string) => `¿Qué *subcliente* de *${cliente}*?`,
-  clienteNoEncontrado: "❌ No encontré ese cliente. Escribí de nuevo *cliente y subcliente*.",
+  clienteNoEncontrado: "❌ No se encontró ese *cliente y subcliente*. Escribilos de nuevo.",
+  /** Coincidencia exacta: igual se confirma con [Sí] [No]. */
+  confirmar: (destino: string) => `🔎 Encontré *${destino}*. ¿Es correcto?`,
   plantaNoEncontrada: (cliente: string) => `❌ No encontré ese subcliente en *${cliente}*. Escribilo de nuevo.`,
   quisisteDecir: (destino: string) => `🤔 ¿Quisiste decir *${destino}*?\nSi no, escribí el *cliente y subcliente* correctos.`,
   reescribir: "Dale, escribí el *cliente y subcliente* correctos.",

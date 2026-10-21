@@ -134,8 +134,8 @@ export class ConsultaFlow {
         st.modo = dni ? "chofer" : "dominio";
         st.pendiente = { tipo: st.modo, identificador: (dni ?? patente)! };
       } else {
-        // Puede estar cambiando de planta ("y en vista?"); si no, se repiten las opciones.
-        this.aplicarClienteSubcliente(st, msg.text, clientes);
+        // Puede estar cambiando de cliente o subcliente ("y en vista?"): se confirma como al principio.
+        if (this.cambiaDestino(st, msg.text, clientes)) return this.otroDestino(st, msg, payload, clientes, emit);
         return this.retomar(st, clientes, emit);
       }
     }
@@ -284,10 +284,8 @@ export class ConsultaFlow {
   // --- Credencial de ingreso (por cliente y subcliente) -------------------------------
 
   private async pasoCredencial(st: ConsultaState, modo: TipoRegistro, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
-    const cambio = this.aplicarClienteSubcliente(st, msg.text, clientes);
-    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    // Cambió a un cliente sin decir la planta: se completa como al principio.
-    if (!cliente || !planta) return this.pasoPlanta(st, msg, payload, clientes, emit);
+    // Escribió otro cliente o subcliente: se confirma como al principio (y se sigue con el mismo DNI/dominio).
+    if (this.cambiaDestino(st, msg.text, clientes)) return this.otroDestino(st, msg, payload, clientes, emit);
     const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
     const destino = etiqueta(b.cliente, b.planta);
 
@@ -300,8 +298,7 @@ export class ConsultaFlow {
     const id = modo === "chofer" ? findDniInText(msg.text) : findPatenteInText(msg.text);
     if (id) return this.consultar(st, modo, id, destino, emit);
 
-    // Acaba de elegir la planta: se pide el DNI o la patente.
-    if (cambio.reconocio || !msg.text.trim()) return this.pedirIdentificador(modo, destino, emit);
+    if (!msg.text.trim()) return this.pedirIdentificador(modo, destino, emit);
     if (modo === "chofer") return emit({ kind: "text", text: CONSULTA.dniInvalido(normalizeDni(msg.text).error ?? "DNI inválido.") });
     return emit({ kind: "text", text: CONSULTA.patenteInvalida(normalizePatente(msg.text).error ?? "Patente inválida.") });
   }
@@ -310,18 +307,21 @@ export class ConsultaFlow {
     return emit({ kind: "text", text: modo === "chofer" ? CONSULTA.pedirDniPara(destino) : CONSULTA.pedirPatentePara(destino) });
   }
 
-  /** Cambio de planta escrito en medio de la consulta ("y en vista planta 2?"). Sólo coincidencias exactas. */
-  private aplicarClienteSubcliente(st: ConsultaState, texto: string, clientes: Cliente[]): { reconocio: boolean } {
-    if (!texto.trim()) return { reconocio: false };
+  /** ¿Escribió, en medio de la consulta, un cliente o subcliente distinto del elegido? ("y en vista planta 2?") */
+  private cambiaDestino(st: ConsultaState, texto: string, clientes: Cliente[]): boolean {
+    if (!texto.trim()) return false;
     const cliente = resolverCliente(texto, clientes);
-    if (cliente) {
-      if (cliente.codigo !== st.clienteCodigo) st.plantaCodigo = undefined;
-      st.clienteCodigo = cliente.codigo;
-    }
+    if (cliente && cliente.codigo !== st.clienteCodigo) return true;
     const actual = clientes.find((c) => c.codigo === st.clienteCodigo);
     const planta = actual ? resolverPlanta(texto, actual) : undefined;
-    if (planta) st.plantaCodigo = planta.codigo;
-    return { reconocio: Boolean(cliente || planta) };
+    return planta !== undefined && planta.codigo !== st.plantaCodigo;
+  }
+
+  /** Otro cliente o subcliente: se suelta el actual y se pasa por la confirmación [Sí] [No]. */
+  private otroDestino(st: ConsultaState, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
+    st.clienteCodigo = undefined;
+    st.plantaCodigo = undefined;
+    return this.pasoPlanta(st, msg, payload, clientes, emit);
   }
 
   private pedirCliente(st: ConsultaState, emit: Emit): Promise<void> {

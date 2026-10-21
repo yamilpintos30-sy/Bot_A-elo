@@ -59,15 +59,22 @@ export function pasoDestino(st: EstadoDestino, texto: string, payload: string | 
     st.pidioPlanta = true;
     return { listo: false, salida: [{ kind: "text", text }] };
   };
-  const preguntar = (clienteCodigo: string, plantaCodigo: string | undefined): ResultadoDestino => {
+  /**
+   * Pregunta [Sí] [No] por un cliente y subcliente: SIEMPRE, sea coincidencia
+   * exacta ("Encontré X. ¿Es correcto?") o parecida ("¿Quisiste decir X?").
+   * Hasta el Sí no queda elegido nada.
+   */
+  const confirmar = (clienteCodigo: string, plantaCodigo: string | undefined, parecido: boolean): ResultadoDestino => {
     const { cliente, planta } = buscar(clientes, clienteCodigo, plantaCodigo);
     st.sugerencia = { clienteCodigo, plantaCodigo };
+    st.clienteCodigo = undefined;
+    st.plantaCodigo = undefined;
     const nombre = `${nombreCorto(cliente!.nombre)}${planta ? ` – ${planta.nombre}` : ""}`;
-    return { listo: false, salida: [{ kind: "buttons", text: DESTINO.quisisteDecir(nombre), buttons: [SI, NO] }] };
+    return { listo: false, salida: [{ kind: "buttons", text: parecido ? DESTINO.quisisteDecir(nombre) : DESTINO.confirmar(nombre), buttons: [SI, NO] }] };
   };
 
-  // 1. Respuesta a "¿Quisiste decir ...?".
-  let reconocio = false;
+  // 1. Respuesta a la confirmación.
+  let confirmado = false;
   if (st.sugerencia) {
     const sug = st.sugerencia;
     st.sugerencia = undefined;
@@ -76,11 +83,12 @@ export function pasoDestino(st: EstadoDestino, texto: string, payload: string | 
     if (resp === "si") {
       st.clienteCodigo = sug.clienteCodigo;
       st.plantaCodigo = sug.plantaCodigo;
-      reconocio = true;
+      confirmado = true;
       texto = ""; // ya se usó
     }
     // Otra cosa: se toma como un nuevo intento.
   }
+  const antes = `${st.clienteCodigo}/${st.plantaCodigo}`;
 
   // 2. Coincidencia exacta (nombre, alias o código).
   if (texto.trim()) {
@@ -88,14 +96,10 @@ export function pasoDestino(st: EstadoDestino, texto: string, payload: string | 
     if (cliente) {
       if (cliente.codigo !== st.clienteCodigo) st.plantaCodigo = undefined;
       st.clienteCodigo = cliente.codigo;
-      reconocio = true;
     }
     const actual = clientes.find((c) => c.codigo === st.clienteCodigo);
     const planta = actual ? resolverPlanta(texto, actual) : undefined;
-    if (planta) {
-      st.plantaCodigo = planta.codigo;
-      reconocio = true;
-    }
+    if (planta) st.plantaCodigo = planta.codigo;
   }
 
   // 3. Sin cliente: sugerencia o volver a pedir.
@@ -103,7 +107,7 @@ export function pasoDestino(st: EstadoDestino, texto: string, payload: string | 
   if (!cliente) {
     if (!esIntento(texto)) return pedir(pregunta);
     const s = sugerir(texto, clientes);
-    if (s?.cliente) return preguntar(s.cliente.codigo, s.planta?.codigo);
+    if (s?.cliente) return confirmar(s.cliente.codigo, s.planta?.codigo, true);
     return pedir(st.pidioPlanta ? DESTINO.clienteNoEncontrado : pregunta);
   }
 
@@ -113,11 +117,16 @@ export function pasoDestino(st: EstadoDestino, texto: string, payload: string | 
       st.plantaCodigo = cliente.plantas[0]!.codigo;
     } else if (texto.trim() && nombraSubcliente(texto, cliente)) {
       const p = sugerirPlanta(texto, cliente);
-      if (p) return preguntar(cliente.codigo, p.codigo);
+      if (p) return confirmar(cliente.codigo, p.codigo, true);
       return pedir(DESTINO.plantaNoEncontrada(nombreCorto(cliente.nombre)));
     } else {
       return pedir(DESTINO.elegirPlanta(nombreCorto(cliente.nombre)));
     }
   }
-  return { listo: true, reconocio };
+
+  // 5. Cliente y subcliente completos. Si cambiaron en este mensaje y no vienen
+  //    de un Sí, se confirman antes de seguir.
+  const cambio = `${st.clienteCodigo}/${st.plantaCodigo}` !== antes;
+  if (cambio && !confirmado) return confirmar(st.clienteCodigo!, st.plantaCodigo, false);
+  return { listo: true, reconocio: cambio || confirmado };
 }
