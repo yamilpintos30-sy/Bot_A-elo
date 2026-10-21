@@ -66,7 +66,7 @@ const unidad = (n: number, listado: boolean) => `${listado ? "registro" : "carne
 
 /** Cliente y subcliente (carga y consulta): solo texto, sin listas de opciones. */
 export const DESTINO = {
-  elegirPlanta: (cliente: string) => `¿Qué subcliente (planta) de *${cliente}*?`,
+  elegirPlanta: (cliente: string) => `¿Qué *subcliente* de *${cliente}*?`,
   clienteNoEncontrado: "❌ No encontré ese cliente. Escribí de nuevo *cliente y subcliente*.",
   plantaNoEncontrada: (cliente: string) => `❌ No encontré ese subcliente en *${cliente}*. Escribilo de nuevo.`,
   quisisteDecir: (destino: string) => `🤔 ¿Quisiste decir *${destino}*?`,
@@ -164,14 +164,14 @@ export const CONSULTA = {
   /** Mismo saludo que Enri (con el nombre si se identificó el teléfono). */
   saludo: (bot: string, nombre?: string | null) =>
     nombre ? `¡Hola, ${nombre}! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*` : `¡Hola! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*`,
-  pedirClienteSubcliente: "¿A qué planta vas a ingresar? Escribí *cliente y subcliente*.",
+  pedirClienteSubcliente: "Escribí *cliente y subcliente* para la consulta.",
   /** Menú principal: dos ramas. */
   menuPrincipal: [
     "¿Qué querés consultar?",
-    "🪪 *Habilitación*: credencial de ingreso a planta y vencimientos, por DNI o por dominio.",
+    "🪪 *Habilitación*: credencial de ingreso y vencimiento en un cliente y subcliente, por DNI o por dominio.",
     "📄 *VTV y seguro*: te mando el comprobante del vehículo.",
   ].join("\n"),
-  /** Rama habilitación, con la planta elegida. */
+  /** Rama habilitación, con el cliente y subcliente elegidos. */
   menuHabilitacion: (destino: string) => `✅ *${destino}*.\n¿Consultás por *DNI* (chofer) o por *dominio* (vehículo)?`,
   /** Rama VTV y seguro. */
   menuVehiculo: "¿Qué comprobante necesitás?",
@@ -190,7 +190,7 @@ export const CONSULTA = {
   sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas de vencimientos.",
   preguntaCarnet: "¿Querés que te pase el carnet?",
   /** Momento oportuno para aclarar cómo seguir. */
-  algoMas: "¿Necesitás algo más?\nPara otro DNI o dominio en esta planta, tocá *Consulta*; para volver al inicio, *Menú*.",
+  algoMas: "¿Necesitás algo más?\nPara otro DNI o dominio en este cliente y subcliente, tocá *Consulta*; para volver al inicio, *Menú*.",
   algoMasVehiculo: "¿Necesitás algo más?\nPara otra patente o para consultar la habilitación, tocá *Menú*.",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
 };
@@ -209,7 +209,7 @@ export function respuestaConsulta(opts: {
   identificador: string;
   nombre: string | null;
   plantas: LineaPlanta[];
-  /** Planta por la que preguntó y donde NO tiene credencial. */
+  /** Cliente y subcliente por el que preguntó y donde NO tiene credencial. */
   sinCredencialEn?: string;
   hoy: CalendarDate;
 }): string {
@@ -220,13 +220,13 @@ export function respuestaConsulta(opts: {
   if (opts.sinCredencialEn) lineas.push("", `❌ No tenés credencial cargada para *${opts.sinCredencialEn}*.`);
 
   if (plantas.length > 0) {
-    lineas.push("", "🏭 *Ingreso a planta*");
+    lineas.push("", "🪪 *Habilitación*");
     for (const p of plantas) {
       lineas.push(`• ${p.destino}: ${p.enSeaWhite ? estadoCredencial(p.vencimiento, hoy) : "⚪ sin datos vigentes en el sistema"}`);
       if (p.observaciones) lineas.push(`   ⚠️ ${p.observaciones}`);
     }
   } else if (!opts.sinCredencialEn) {
-    lineas.push("", `🏭 No encontré credenciales de ingreso a planta cargadas para ${tipo === "chofer" ? "ese DNI" : "esa patente"}.`);
+    lineas.push("", `🪪 No encontré credenciales de ingreso cargadas para ${tipo === "chofer" ? "ese DNI" : "esa patente"}.`);
   }
   return lineas.join("\n");
 }

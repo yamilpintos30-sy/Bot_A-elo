@@ -243,7 +243,7 @@ describe("cargador", () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "Total");
-    expect(texts(outs)).toMatch(/Qué subcliente \(planta\) de \*Total Austral\*/);
+    expect(texts(outs)).toMatch(/Qué \*subcliente\* de \*Total Austral\*/);
     expect(buttons(outs)).not.toContain("Planta 1");
   });
 
@@ -516,7 +516,7 @@ describe("chofer", () => {
     await say(CHOFER, "hola");
 
     let outs = await say(CHOFER, "🪪 Habilitación");
-    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
+    expect(texts(outs)).toMatch(/Escribí \*cliente y subcliente\* para la consulta/);
     expect(texts(outs) + buttons(outs).join()).not.toMatch(/Total Austral|Vista Energy/); // sin opciones
 
     outs = await say(CHOFER, "Total planta 1");
@@ -538,7 +538,7 @@ describe("chofer", () => {
     expect((outs[iFile] as Extract<Outbound, { kind: "file" }>).data.toString()).toContain("33615617"); // SU carnet
     const iAlgoMas = outs.findIndex((o) => o.kind === "buttons" && /Necesitás algo más/.test(o.text));
     expect(iAlgoMas).toBeGreaterThan(iFile); // el carnet primero
-    expect(texts(outs)).toMatch(/en esta planta, tocá \*Consulta\*; para volver al inicio, \*Menú\*/);
+    expect(texts(outs)).toMatch(/en este cliente y subcliente, tocá \*Consulta\*; para volver al inicio, \*Menú\*/);
     expect(buttons(outs)).toEqual(FIN_CONSULTA);
   });
 
@@ -563,7 +563,7 @@ describe("chofer", () => {
     outs = await say(CHOFER, "Menú 😊");
     expect(buttons(outs)).toEqual(MENU);
     outs = await say(CHOFER, "🪪 Habilitación"); // la planta se borró: la vuelve a pedir
-    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
+    expect(texts(outs)).toMatch(/Escribí \*cliente y subcliente\* para la consulta/);
   });
 
   it("[Menú 😊] desde las opciones de habilitación vuelve al menú principal", async () => {
@@ -582,7 +582,7 @@ describe("chofer", () => {
     // Dentro de habilitación, antes de la planta, tampoco.
     await say(CHOFER, "🪪 Habilitación");
     outs = await say(CHOFER, "33615617");
-    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
+    expect(texts(outs)).toMatch(/Escribí \*cliente y subcliente\* para la consulta/);
     expect(texts(outs)).not.toMatch(/No encontré ese cliente|PERSONA 33615617/);
   });
 
@@ -662,7 +662,7 @@ describe("chofer", () => {
     await say(CHOFER, "hola");
     await say(CHOFER, "🪪 Habilitación");
     let outs = await say(CHOFER, "Total Austral");
-    expect(texts(outs)).toMatch(/Qué subcliente \(planta\) de \*Total Austral\*/);
+    expect(texts(outs)).toMatch(/Qué \*subcliente\* de \*Total Austral\*/);
     expect(buttons(outs)).not.toContain("Planta 1");
     outs = await say(CHOFER, "Planta 2");
     expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL – Planta 2\*/);
@@ -714,7 +714,7 @@ describe("chofer", () => {
     expect(buttons(outs)).toEqual(MENU); // seguía en el menú principal
     await say(CHOFER, "🪪 Habilitación");
     outs = await say(CHOFER, "", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/A qué planta vas a ingresar/); // seguía en la planta
+    expect(texts(outs)).toMatch(/Escribí \*cliente y subcliente\* para la consulta/); // seguía en la planta
     expect(procesar).not.toHaveBeenCalled();
   });
 });
