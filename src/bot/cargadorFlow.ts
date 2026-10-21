@@ -294,6 +294,7 @@ export class CargadorFlow {
         apellidoNombre: c.apellidoNombre,
         vencimiento: c.vencimiento,
         observaciones: c.observaciones,
+        motivoVencimiento: c.motivoVencimiento,
         seawhiteId: okPorId.get(c.identificador)?.id ?? null,
       }));
     await this.deps.registro.guardarCarnets(lote.cargaId, carnets).catch((err) => this.deps.logger.error({ err }, "No se pudo guardar el registro de carnets"));

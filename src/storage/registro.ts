@@ -21,6 +21,8 @@ export interface CarnetRegistrado {
   /** dd-MM-yyyy */
   vencimiento: string;
   observaciones: string | null;
+  /** Qué documento vence en esa fecha (para la lista de no habilitados del panel). */
+  motivoVencimiento?: string | null;
   seawhiteId: number | null;
 }
 
@@ -100,24 +102,26 @@ export class SupabaseRegistro implements RegistroRepo {
   async guardarCarnets(cargaId: number | null, carnets: CarnetRegistrado[]): Promise<void> {
     if (carnets.length === 0) return;
     const now = new Date().toISOString();
-    check(
-      await this.db.from("anelo_carnets").upsert(
-        carnets.map((c) => ({
-          cliente_codigo: c.clienteCodigo,
-          planta_codigo: c.plantaCodigo,
-          tipo: c.tipo,
-          identificador: c.identificador,
-          apellido_nombre: c.apellidoNombre,
-          vencimiento: toDb(c.vencimiento),
-          observaciones: c.observaciones,
-          seawhite_id: c.seawhiteId,
-          carga_id: cargaId,
-          updated_at: now,
-        })),
-        { onConflict: "cliente_codigo,planta_codigo,tipo,identificador" },
-      ),
-      "guardar carnets",
-    );
+    const filas = carnets.map((c) => ({
+      cliente_codigo: c.clienteCodigo,
+      planta_codigo: c.plantaCodigo,
+      tipo: c.tipo,
+      identificador: c.identificador,
+      apellido_nombre: c.apellidoNombre,
+      vencimiento: toDb(c.vencimiento),
+      observaciones: c.observaciones,
+      motivo_vencimiento: c.motivoVencimiento ?? null,
+      seawhite_id: c.seawhiteId,
+      carga_id: cargaId,
+      updated_at: now,
+    }));
+    const guardar = (rows: Array<Record<string, unknown>>) =>
+      this.db.from("anelo_carnets").upsert(rows, { onConflict: "cliente_codigo,planta_codigo,tipo,identificador" });
+    let r = await guardar(filas);
+    // Sin la migración 0005 la columna no existe: se guarda igual, sin el motivo
+    // (este registro es el que usa la consulta y el botón "Ver carnet").
+    if (r.error && /motivo_vencimiento/.test(r.error.message)) r = await guardar(filas.map(({ motivo_vencimiento: _m, ...resto }) => resto));
+    check(r, "guardar carnets");
   }
 
   async buscarCarnets(tipo: TipoRegistro, identificador: string): Promise<CarnetRegistrado[]> {
