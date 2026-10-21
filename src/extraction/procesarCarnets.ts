@@ -15,6 +15,9 @@ import { CarnetVerifier } from "./verifier.js";
 import { LectorListados } from "./listados/lectorListados.js";
 
 export type EtapaProceso = "separando" | "verificando";
+/** Al verificar ya se sabe la clase de documento. */
+export type ModoDocumento = "carnets" | "listado";
+export type OnEtapa = (etapa: EtapaProceso, modo?: ModoDocumento) => Promise<void> | void;
 
 export interface ProcesamientoResultado extends ReviewResult {
   formato: string | null;
@@ -45,12 +48,12 @@ export class ProcesadorCarnets {
   }
 
   /** `onEtapa` avisa en qué paso está (el bot lo usa para mantener informado al cargador). */
-  async procesar(pdf: Buffer, filename: string, onEtapa?: (etapa: EtapaProceso) => Promise<void> | void): Promise<ProcesamientoResultado> {
+  async procesar(pdf: Buffer, filename: string, onEtapa?: OnEtapa): Promise<ProcesamientoResultado> {
     const started = Date.now();
     const usage = emptyUsage();
     await onEtapa?.("separando");
     const extraccion = await this.extraer(pdf, filename, usage);
-    await onEtapa?.("verificando");
+    await onEtapa?.("verificando", extraccion.manifest.modo ?? "carnets");
     const verificacion = await this.verifier.verify(extraccion.archivos, usage, extraccion.recortes);
     const review = reviewCarnets({
       manifest: extraccion.manifest,

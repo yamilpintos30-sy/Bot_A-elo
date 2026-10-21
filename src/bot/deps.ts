@@ -2,7 +2,7 @@
  * Dependencias de los flujos del bot. Son interfaces para poder testear todo
  * con dobles (sin Claude, sin SEA WHITE, sin Chatwoot, sin Supabase).
  */
-import type { EtapaProceso, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
+import type { OnEtapa, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
 import type { Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { ResultadoVerificacion } from "../extraction/verificadorComprobantes.js";
 import type { CargadoresRepo } from "../storage/cargadores.js";
@@ -26,7 +26,7 @@ export interface SeaWhiteService {
 }
 
 export interface Procesador {
-  procesar(pdf: Buffer, filename: string, onEtapa?: (etapa: EtapaProceso) => Promise<void> | void): Promise<ProcesamientoResultado>;
+  procesar(pdf: Buffer, filename: string, onEtapa?: OnEtapa): Promise<ProcesamientoResultado>;
 }
 
 export interface BotDeps {

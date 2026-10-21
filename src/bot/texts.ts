@@ -56,9 +56,13 @@ export const DESPEDIDA = {
 
 /** "choferes" / "dominios" y su emoji, para los textos del cargador. */
 export const TIPO = {
-  chofer: { plural: "choferes", emoji: "👤", carnets: "carnets de personas" },
-  dominio: { plural: "dominios", emoji: "🚛", carnets: "carnets de vehículos" },
+  chofer: { plural: "choferes", emoji: "👤", carnets: "carnets de personas", registros: "registros de personas" },
+  dominio: { plural: "dominios", emoji: "🚛", carnets: "carnets de vehículos", registros: "registros de vehículos" },
 } as const;
+
+/** En un listado de estado no hay carnets: se habla de "registros". */
+const deTipo = (tipo: "chofer" | "dominio", listado: boolean) => (listado ? TIPO[tipo].registros : TIPO[tipo].carnets);
+const unidad = (n: number, listado: boolean) => `${listado ? "registro" : "carnet"}${n === 1 ? "" : "s"}`;
 
 export const CARGA = {
   menu: "¿Qué documentación vas a cargar?",
@@ -71,19 +75,22 @@ export const CARGA = {
   plantaNoEncontrada: (cliente: string, plantas: string[]) => `❌ No encontré ese subcliente en ${cliente}. Subclientes: ${plantas.join(", ")}.`,
   encontrado: (destino: string, tipo: "chofer" | "dominio") => `✅ Cliente y subcliente encontrados: *${destino}*.\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,
   soloPdf: "Solo se aceptan archivos PDF o fotos (JPG o PNG) de los carnets.",
-  recibido: (archivo: string) => `📥 Recibí *${archivo}*. Estoy separando los carnets; puede tardar uno o dos minutos.`,
+  /** Todavía no se sabe si son carnets o un listado: texto neutro. */
+  recibido: (archivo: string) => `📥 Recibí *${archivo}*. Estoy procesando el documento; puede tardar uno o dos minutos.`,
   formatoNoSoportado: (archivo: string) => `❌ "${archivo}" no es un PDF ni una foto JPG o PNG. Mandá el PDF o una foto del carnet.`,
   verificando: "🔎 Carnets separados. Estoy verificando los datos de cada uno.",
+  verificandoListado:
+    "📋 Es un listado de estado, no tiene carnet individual: cada persona o vehículo se va a subir con el documento completo y su fila marcada, como constancia. Estoy verificando los datos de cada uno.",
   sigue: "⏳ Sigue en proceso, aguardá un momento por favor.",
   noDescarga: "❌ No pude descargar el archivo. Mandalo de nuevo.",
   falloProceso: (motivo: string) => `❌ No pude procesar el PDF: ${motivo}\nMandalo de nuevo.`,
   pendiente: "Hay una carga pendiente de confirmar. Confirmala o cancelala antes de mandar otra.",
   cancelada: "❌ Carga cancelada. No se cargó nada.",
   expirada: "⚠️ La carga pendiente expiró. Mandá el PDF de nuevo.",
-  cargando: (n: number) => `📤 Guardando ${n} carnet${n === 1 ? "" : "s"} en el sistema…`,
+  cargando: (n: number, listado = false) => `📤 Guardando ${n} ${unidad(n, listado)} en el sistema…`,
   /** Filtro de tipo: eligió un tipo y el PDF trae TODO del otro. */
-  tipoIncorrecto: (elegido: "chofer" | "dominio", otro: "chofer" | "dominio", n: number) =>
-    `⚠️ Elegiste cargar *${TIPO[elegido].plural}*, pero el PDF tiene ${n} ${TIPO[otro].carnets} (${TIPO[otro].plural}).\nNo se cargó nada. ¿Qué hago?`,
+  tipoIncorrecto: (elegido: "chofer" | "dominio", otro: "chofer" | "dominio", n: number, listado = false) =>
+    `⚠️ Elegiste cargar *${TIPO[elegido].plural}*, pero el PDF tiene ${n} ${deTipo(otro, listado)} (${TIPO[otro].plural}).\nNo se cargó nada. ¿Qué hago?`,
 };
 
 /** Filtro de tipo: el PDF trae carnets del tipo elegido y también del otro. */
@@ -97,8 +104,8 @@ export function avisoTipoMezclado(elegido: "chofer" | "dominio", otros: CarnetLi
 }
 
 /** Después de cargar un tipo, ofrecer el otro tipo del MISMO documento. */
-export function ofrecerOtroTipo(otro: "chofer" | "dominio", cantidad: number): string {
-  return `El documento también tiene ${cantidad} ${TIPO[otro].carnets}. ¿Querés cargarlos ahora?`;
+export function ofrecerOtroTipo(otro: "chofer" | "dominio", cantidad: number, listado = false): string {
+  return `El documento también tiene ${cantidad} ${deTipo(otro, listado)}. ¿Querés cargarlos ahora?`;
 }
 
 function lineaRechazo(r: CarnetRechazado): string {
@@ -129,8 +136,8 @@ export function resumenParaConfirmar(destino: string, aceptados: CarnetListo[], 
 }
 
 /** Cuando no quedó ningún carnet apto: no hay nada que confirmar. */
-export function sinCarnetsAptos(destino: string, rechazados: CarnetRechazado[]): string {
-  return [`📋 *${destino}*`, "❌ No quedó ningún carnet apto para cargar.", ...rechazados.map(lineaRechazo), "", "Revisá el PDF y mandalo de nuevo."].join("\n");
+export function sinCarnetsAptos(destino: string, rechazados: CarnetRechazado[], listado = false): string {
+  return [`📋 *${destino}*`, `❌ No quedó ningún ${listado ? "registro" : "carnet"} apto para cargar.`, ...rechazados.map(lineaRechazo), "", "Revisá el PDF y mandalo de nuevo."].join("\n");
 }
 
 /** Resultado final de la carga en SEA WHITE. */

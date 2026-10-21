@@ -191,8 +191,8 @@ export class CargadorFlow {
     const timer = setInterval(() => void emit({ kind: "text", text: CARGA.sigue }).catch(() => undefined), this.avisoProgresoMs);
     let resultado: LotePendiente["resultado"];
     try {
-      resultado = await this.deps.procesador.procesar(pdf, nombrePdf, async (etapa) => {
-        if (etapa === "verificando") await emit({ kind: "text", text: CARGA.verificando });
+      resultado = await this.deps.procesador.procesar(pdf, nombrePdf, async (etapa, modo) => {
+        if (etapa === "verificando") await emit({ kind: "text", text: modo === "listado" ? CARGA.verificandoListado : CARGA.verificando });
       });
     } catch (err) {
       const motivo = err instanceof Error ? err.message : String(err);
@@ -207,7 +207,7 @@ export class CargadorFlow {
       await this.deps.registro
         .terminarCarga(cargaId, { estado: "fallida", total: 0, correctos: 0, errores: resultado.rechazados.length, costoUsd: resultado.costoUsd, detalle: { rechazados: resultado.rechazados, formato: resultado.formato } })
         .catch(() => undefined);
-      return this.conMenu(emit, sinCarnetsAptos(destino, resultado.rechazados));
+      return this.conMenu(emit, sinCarnetsAptos(destino, resultado.rechazados, esListado(resultado)));
     }
 
     const lote: LotePendiente = { tipo, cargaId, clienteCodigo, plantaCodigo, destino, archivo: nombre, resultado };
@@ -228,7 +228,7 @@ export class CargadorFlow {
       const otro = otroTipo(lote.tipo);
       return emit({
         kind: "buttons",
-        text: CARGA.tipoIncorrecto(lote.tipo, otro, otros.length),
+        text: CARGA.tipoIncorrecto(lote.tipo, otro, otros.length, esListado(lote.resultado)),
         buttons: [{ title: buttonTitle(`Cargar ${TIPO[otro].plural}`), payload: "cambiar" }, CANCELAR],
       });
     }
@@ -282,12 +282,12 @@ export class CargadorFlow {
   private ofrecerOtro(lote: LotePendiente, emit: Emit): Promise<void> {
     const cantidad = lote.resultado.aceptados.filter((c) => c.tipo === lote.tipo).length;
     const boton = lote.tipo === "dominio" ? "🚛 Cargar dominios" : "👤 Cargar choferes";
-    return emit({ kind: "buttons", text: ofrecerOtroTipo(lote.tipo, cantidad), buttons: [{ title: boton, payload: "cargarotro" }, BOTON_MENU, BOTON_FIN] });
+    return emit({ kind: "buttons", text: ofrecerOtroTipo(lote.tipo, cantidad, esListado(lote.resultado)), buttons: [{ title: boton, payload: "cargarotro" }, BOTON_MENU, BOTON_FIN] });
   }
 
   private async confirmar(session: Session, lote: LotePendiente, emit: Emit): Promise<void> {
     const aCargar: CarnetListo[] = lote.resultado.aceptados.filter((c) => c.tipo === lote.tipo);
-    await emit({ kind: "text", text: CARGA.cargando(aCargar.length) });
+    await emit({ kind: "text", text: CARGA.cargando(aCargar.length, esListado(lote.resultado)) });
 
     const registros: RegistroCarga[] = aCargar.map((c) => ({
       cliente: lote.clienteCodigo,
@@ -351,3 +351,6 @@ export class CargadorFlow {
     return emit({ kind: "buttons", text: CARGA.otraCarga, buttons: MENU });
   }
 }
+
+/** Listado de estado (sin carnet individual): cambia cómo se le habla al cargador. */
+const esListado = (r: LotePendiente["resultado"]) => r.manifest.modo === "listado";

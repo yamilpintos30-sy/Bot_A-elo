@@ -10,7 +10,7 @@ import { resolver } from "../src/bot/catalogo.js";
 import { LotesPendientes, type BotDeps, type SeaWhiteService } from "../src/bot/deps.js";
 import { BotEngine } from "../src/bot/engine.js";
 import type { IncomingAttachment, IncomingMessage, Outbound } from "../src/bot/types.js";
-import type { ProcesamientoResultado } from "../src/extraction/procesarCarnets.js";
+import type { OnEtapa, ProcesamientoResultado } from "../src/extraction/procesarCarnets.js";
 import type { CarnetListo } from "../src/extraction/review.js";
 import type { Consulta, RegistroCarga, ResumenCarga, TipoRegistro } from "../src/integrations/seawhite/types.js";
 import { MemoryCargadores } from "../src/storage/cargadores.js";
@@ -97,7 +97,7 @@ function resultado(aceptados: CarnetListo[], rechazados: ProcesamientoResultado[
   return { aceptados, rechazados, formato: "test", notaModelo: "", manifest: { carnets: [], descartados: [] }, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0 }, costoUsd: 0.1, duracionMs: 1 };
 }
 
-type ProcesarFn = (pdf: Buffer, f: string, onEtapa?: (e: "separando" | "verificando") => Promise<void> | void) => Promise<ProcesamientoResultado>;
+type ProcesarFn = (pdf: Buffer, f: string, onEtapa?: OnEtapa) => Promise<ProcesamientoResultado>;
 
 function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVerificacion> } = {}) {
   const sent: Array<{ conversationId: string; out: Outbound }> = [];
@@ -191,7 +191,7 @@ describe("cargador", () => {
 
     outs = await say(CARGADOR, "", [pdfAdj()]);
     const t = texts(outs);
-    expect(t).toMatch(/Recibí \*carnets\.pdf\*\. Estoy separando los carnets/);
+    expect(t).toMatch(/Recibí \*carnets\.pdf\*\. Estoy procesando el documento/);
     expect(t).toMatch(/Carnets separados\. Estoy verificando/);
     expect(t).toMatch(/2 listos para cargar \(2 personas\)/);
     expect(t).toMatch(/Inhabilitado para conducir/);
@@ -278,6 +278,29 @@ describe("cargador", () => {
     ]);
     // Ya no se ofrece nada más: vuelve al menú.
     expect(buttons(outs)).not.toContain("👤 Cargar choferes");
+  });
+
+  it("LISTADO de estado: avisa que no tiene carnet individual y habla de registros", async () => {
+    const { say, seawhite } = setup({
+      procesar: async (_pdf, _f, onEtapa) => {
+        await onEtapa?.("separando");
+        await onEtapa?.("verificando", "listado");
+        const r = resultado([carnet("33919536", "31-10-2026"), carnet("AG105UX", "12-03-2027", { tipo: "dominio", apellidoNombre: null })]);
+        return { ...r, manifest: { modo: "listado", carnets: [], descartados: [] } };
+      },
+    });
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1");
+    let outs = await say(CARGADOR, "", [pdfAdj("PAE SLB - Estatus.pdf")]);
+    expect(texts(outs)).toMatch(/Estoy procesando el documento/);
+    expect(texts(outs)).toMatch(/Es un listado de estado, no tiene carnet individual.*fila marcada/s);
+    expect(texts(outs)).not.toMatch(/Carnets separados/);
+    outs = await say(CARGADOR, "Confirmar carga");
+    expect(texts(outs)).toMatch(/Guardando 1 registro en el sistema/);
+    expect(texts(outs)).toMatch(/también tiene 1 registros de vehículos/);
+    await say(CARGADOR, "🚛 Cargar dominios");
+    await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas.map((c) => c.tipo)).toEqual(["chofer", "dominio"]);
   });
 
   it("PDF mezclado: Menú después de cargar un tipo descarta el otro", async () => {
