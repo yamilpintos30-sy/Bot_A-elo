@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import pino from "pino";
 import { PDFDocument } from "pdf-lib";
-import { resolver } from "../src/bot/catalogo.js";
+import { resolver, sugerir } from "../src/bot/catalogo.js";
 import { LotesPendientes, type BotDeps, type SeaWhiteService } from "../src/bot/deps.js";
 import { BotEngine } from "../src/bot/engine.js";
 import type { IncomingAttachment, IncomingMessage, Outbound } from "../src/bot/types.js";
@@ -152,6 +152,43 @@ const pdfAdj = (name = "carnets.pdf"): IncomingAttachment => ({ url: `https://ch
 const texts = (outs: Outbound[]) => outs.map((o) => (o.kind === "file" ? `[file ${o.filename}]` : o.kind === "image" ? `[imagen] ${o.caption}` : o.text)).join("\n---\n");
 const buttons = (outs: Outbound[]) => outs.flatMap((o) => (o.kind === "buttons" ? o.buttons.map((b) => b.title) : []));
 
+describe("¿Quisiste decir...? (sugerencia de cliente y subcliente)", () => {
+  // Como quedan en la base: el panel arma alias con el nombre completo (y la primera palabra si es larga).
+  const REALES: Cliente[] = [
+    ...CLIENTES,
+    { codigo: "999993", nombre: "TANGO ENERGY", alias: ["tango energy", "tango"], plantas: [{ codigo: "000001", nombre: "Planta 1", alias: [] }] },
+    { codigo: "999994", nombre: "PAN AMERICAN ENERGY", alias: ["pan american energy"], plantas: [{ codigo: "000001", nombre: "SLB", alias: [] }] },
+    { codigo: "999995", nombre: "PLUSPETROL", alias: ["pluspetrol"], plantas: [{ codigo: "000001", nombre: "Planta 1", alias: [] }] },
+  ];
+  const sug = (t: string) => {
+    const r = sugerir(t, REALES);
+    return r ? `${r.cliente!.codigo}/${r.planta?.codigo ?? "-"}` : null;
+  };
+
+  it("abreviaturas, palabras pegadas y errores de tipeo (casos reales)", () => {
+    expect(sug("Pan  SLB")).toBe("999994/000001");
+    expect(sug("panamelic slb")).toBe("999994/000001");
+    expect(sug("pan american slb")).toBe("999994/000001");
+    expect(sug("tatal planta 1")).toBe("999991/000001");
+    expect(sug("tango plnta 1")).toBe("999993/000001");
+    expect(sug("plus petrol 1")).toBe("999995/000001");
+  });
+
+  it("el subcliente con nombre propio también es una pista ('slb' solo)", () => {
+    expect(sug("slb")).toBe("999994/000001");
+  });
+
+  it("no adivina: nada parecido, o 'planta 1' sola (la tienen todos)", () => {
+    expect(sug("shell planta 2")).toBeNull();
+    expect(sug("planta 1")).toBeNull();
+    expect(sug("hola")).toBeNull();
+  });
+
+  it("mismo cliente con dos subclientes parejos: sugiere sólo el cliente", () => {
+    expect(sug("tatal")).toBe("999991/-");
+  });
+});
+
 describe("reconocimiento de cliente y planta", () => {
   it("entiende las formas habituales de escribirlos", () => {
     expect(resolver("Total planta 2", CLIENTES)).toMatchObject({ cliente: { codigo: "999991" }, planta: { codigo: "000002" } });
@@ -264,7 +301,7 @@ describe("cargador", () => {
     await say(CARGADOR, "👤 Choferes");
     await say(CARGADOR, "vistaa energi 1");
     let outs = await say(CARGADOR, "✏️ No");
-    expect(texts(outs)).toMatch(/escribí de nuevo \*cliente y subcliente\*/);
+    expect(texts(outs)).toMatch(/escribí el \*cliente y subcliente\* correctos/);
     outs = await say(CARGADOR, "Total planta 2");
     expect(texts(outs)).toMatch(/encontrados: \*TOTAL AUSTRAL – Planta 2\*/);
   });

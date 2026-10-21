@@ -69,8 +69,8 @@ export const DESTINO = {
   elegirPlanta: (cliente: string) => `¿Qué *subcliente* de *${cliente}*?`,
   clienteNoEncontrado: "❌ No encontré ese cliente. Escribí de nuevo *cliente y subcliente*.",
   plantaNoEncontrada: (cliente: string) => `❌ No encontré ese subcliente en *${cliente}*. Escribilo de nuevo.`,
-  quisisteDecir: (destino: string) => `🤔 ¿Quisiste decir *${destino}*?`,
-  reescribir: "Dale, escribí de nuevo *cliente y subcliente*.",
+  quisisteDecir: (destino: string) => `🤔 ¿Quisiste decir *${destino}*?\nSi no, escribí el *cliente y subcliente* correctos.`,
+  reescribir: "Dale, escribí el *cliente y subcliente* correctos.",
 };
 
 export const CARGA = {

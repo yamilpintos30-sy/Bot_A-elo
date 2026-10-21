@@ -153,17 +153,74 @@ export function sugerirPlanta(texto: string, cliente: Cliente): Planta | undefin
   );
 }
 
+/** Palabras de relleno que no ayudan a reconocer cliente ni subcliente. */
+const RELLENO = /^(de|del|la|el|en|y|para|cliente|subcliente|sub)$/;
+
 /**
- * Sugerencia cuando lo escrito no coincide con ningún cliente pero se parece
- * a uno ("tatal planta 1" -> Total Austral – Planta 1). Nunca se aplica sola:
- * el bot pregunta "¿Quisiste decir...?".
+ * Qué tan bien una palabra escrita coincide con alguna de las palabras de un
+ * nombre (0 a 1): igual, abreviatura ("pan" -> "pan american"), con errores de
+ * tipeo, o con dos palabras pegadas ("panamelic" -> "pan american"). Los
+ * números sólo cuentan si son iguales ("planta 1" no es "planta 2").
+ */
+function coincidencia(palabra: string, nombres: string[][]): number {
+  let mejor = 0;
+  for (const toks of nombres) {
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i]!;
+      if (palabra === t) return 1;
+      if (/^\d+$/.test(palabra) || /^\d+$/.test(t)) continue;
+      if (palabra.length >= 3 && t.startsWith(palabra)) mejor = Math.max(mejor, 0.9);
+      mejor = Math.max(mejor, 1 - distancia(palabra, t) / Math.max(palabra.length, t.length));
+      const pegadas = toks[i + 1] && !/^\d+$/.test(toks[i + 1]!) ? t + toks[i + 1] : "";
+      if (pegadas) mejor = Math.max(mejor, 1 - distancia(palabra, pegadas) / Math.max(palabra.length, pegadas.length));
+    }
+  }
+  return mejor;
+}
+
+const tokensDe = (nombres: string[]) => nombres.map((n) => normalizeText(n).split(" ").filter(Boolean)).filter((t) => t.length);
+
+/**
+ * Sugerencia cuando lo escrito no coincide exacto ("pan slb", "panamelic slb",
+ * "tatal planta 1"). Se puntúa cada cliente + subcliente por cuánto explica lo
+ * escrito; para sugerir tiene que haber una pista del cliente o del nombre
+ * propio del subcliente (no alcanza "planta 1", que lo tienen todos). Si dos
+ * clientes distintos quedan parejos, no se sugiere ninguno. Nunca se aplica
+ * sola: el bot pregunta "¿Quisiste decir...?".
  */
 export function sugerir(texto: string, clientes: Cliente[]): Resolucion | undefined {
-  const cliente = masParecido(
-    palabras(texto),
-    clientes.map((c) => ({ item: c, nombres: [nombreBase(c.nombre), ...c.alias.map(normalizeText)] })),
-  );
-  return cliente ? { cliente, planta: sugerirPlanta(texto, cliente) } : undefined;
+  const palabrasTexto = normalizeText(texto)
+    .split(" ")
+    .filter((w) => w && !RELLENO.test(w));
+  if (!palabrasTexto.length) return undefined;
+
+  const puntajes: Array<{ cliente: Cliente; planta: Planta; puntaje: number }> = [];
+  for (const c of clientes) {
+    const nombresCliente = tokensDe([nombreBase(c.nombre), ...c.alias]);
+    for (const p of c.plantas) {
+      const nombresPlanta = tokensDe([p.nombre, ...p.alias]);
+      const generica = /^planta \d+$/.test(normalizeText(p.nombre));
+      let suma = 0;
+      let pistaCliente = 0;
+      let pistaPlanta = 0;
+      for (const w of palabrasTexto) {
+        const pc = coincidencia(w, nombresCliente);
+        const pp = coincidencia(w, nombresPlanta);
+        pistaCliente = Math.max(pistaCliente, pc);
+        if (!generica) pistaPlanta = Math.max(pistaPlanta, pp);
+        suma += Math.max(pc, pp);
+      }
+      if (pistaCliente < 0.6 && pistaPlanta < 0.8) continue;
+      puntajes.push({ cliente: c, planta: p, puntaje: suma / palabrasTexto.length });
+    }
+  }
+  puntajes.sort((a, b) => b.puntaje - a.puntaje);
+  const mejor = puntajes[0];
+  if (!mejor || mejor.puntaje < 0.6) return undefined;
+  const parejos = puntajes.filter((x) => x !== mejor && x.puntaje >= mejor.puntaje - 0.05);
+  if (parejos.some((x) => x.cliente !== mejor.cliente)) return undefined; // dos clientes posibles: no se adivina
+  // Mismo cliente pero dos subclientes parejos: se sugiere sólo el cliente (y se pregunta el subcliente).
+  return { cliente: mejor.cliente, planta: parejos.length ? undefined : mejor.planta };
 }
 
 export function resolver(texto: string, clientes: Cliente[]): Resolucion {
