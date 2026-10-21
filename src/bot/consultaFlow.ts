@@ -19,11 +19,12 @@ import type { Documentacion, TipoRegistro } from "../integrations/seawhite/types
 import type { Cliente } from "../storage/catalogo.js";
 import { todayInTimeZone } from "../utils/dates.js";
 import { nombreCompleto } from "../utils/names.js";
-import { buttonTitle, normalizeText } from "../utils/text.js";
+import { normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto, resolverCliente, resolverPlanta } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU, PIE } from "./comandos.js";
 import type { BotDeps, Emit } from "./deps.js";
-import { CONSULTA, respuestaConsulta, type LineaPlanta } from "./texts.js";
+import { pasoDestino } from "./pasoDestino.js";
+import { CONSULTA, DESTINO, respuestaConsulta, type LineaPlanta } from "./texts.js";
 import type { ButtonSpec, ConsultaState, IncomingMessage, Session } from "./types.js";
 
 type Modo = NonNullable<ConsultaState["modo"]>;
@@ -134,7 +135,7 @@ export class ConsultaFlow {
         st.pendiente = { tipo: st.modo, identificador: (dni ?? patente)! };
       } else {
         // Puede estar cambiando de planta ("y en vista?"); si no, se repiten las opciones.
-        this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
+        this.aplicarClienteSubcliente(st, msg.text, clientes);
         return this.retomar(st, clientes, emit);
       }
     }
@@ -200,8 +201,8 @@ export class ConsultaFlow {
       return emit({ kind: "buttons", text: CONSULTA.menuVehiculo, buttons: MENU_VEHICULO });
     }
     const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    if (!cliente) return this.pedirCliente(st, clientes, emit);
-    if (!planta) return this.pedirPlanta(cliente, emit);
+    if (!cliente) return this.pedirCliente(st, emit);
+    if (!planta) return this.pedirPlanta(st, cliente, emit);
     if (st.modo === "chofer" || st.modo === "dominio") return this.pedirIdentificador(st.modo, etiqueta(cliente, planta), emit);
     return this.menuHabilitacion(etiqueta(cliente, planta), emit);
   }
@@ -212,22 +213,10 @@ export class ConsultaFlow {
 
   /** Habilitación, primer paso: cliente y subcliente (hasta tenerlos no se toma un DNI). */
   private async pasoPlanta(st: ConsultaState, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
-    const cambio = this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
-    const { cliente } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    if (!cliente) {
-      const texto = msg.text.trim();
-      const esOtraCosa = texto && !cambio.reconocio && !this.esSaludo(texto) && !findDniInText(texto) && !findPatenteInText(texto);
-      // "No encontré ese cliente" sólo si ya se le había pedido y escribió otra cosa.
-      if (st.pidioPlanta && esOtraCosa) await emit({ kind: "text", text: CONSULTA.clienteNoEncontrado(clientes.map((c) => nombreCorto(c.nombre))), sinPie: true });
-      return this.pedirCliente(st, clientes, emit);
-    }
-    if (!st.plantaCodigo) {
-      if (cambio.subclienteInvalido) {
-        await emit({ kind: "text", text: CONSULTA.plantaNoEncontrada(nombreCorto(cliente.nombre), cliente.plantas.map((p) => p.nombre)), sinPie: true });
-      } else if (cliente.plantas.length === 1) {
-        st.plantaCodigo = cliente.plantas[0]!.codigo;
-      }
-      if (!st.plantaCodigo) return this.pedirPlanta(cliente, emit);
+    const paso = pasoDestino(st, msg.text, payload, clientes, CONSULTA.pedirClienteSubcliente);
+    if (!paso.listo) {
+      for (const out of paso.salida) await emit(out);
+      return;
     }
     return this.retomar(st, clientes, emit);
   }
@@ -295,23 +284,10 @@ export class ConsultaFlow {
   // --- Credencial de ingreso (por cliente y subcliente) -------------------------------
 
   private async pasoCredencial(st: ConsultaState, modo: TipoRegistro, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
-    const cambio = this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
+    const cambio = this.aplicarClienteSubcliente(st, msg.text, clientes);
     const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-
-    if (!cliente || !planta) {
-      // Mandó el DNI o la patente antes de la planta: se recuerda y se consulta después.
-      const id = modo === "chofer" ? findDniInText(msg.text) : findPatenteInText(msg.text);
-      if (id) st.pendiente = { tipo: modo, identificador: id };
-    }
-    if (!cliente) return this.pedirCliente(st, clientes, emit);
-    if (!planta) {
-      if (cambio.subclienteInvalido) {
-        await emit({ kind: "text", text: CONSULTA.plantaNoEncontrada(nombreCorto(cliente.nombre), cliente.plantas.map((p) => p.nombre)), sinPie: true });
-      } else if (cliente.plantas.length === 1) {
-        st.plantaCodigo = cliente.plantas[0]!.codigo;
-      }
-      if (!st.plantaCodigo) return this.pedirPlanta(cliente, emit);
-    }
+    // Cambió a un cliente sin decir la planta: se completa como al principio.
+    if (!cliente || !planta) return this.pasoPlanta(st, msg, payload, clientes, emit);
     const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
     const destino = etiqueta(b.cliente, b.planta);
 
@@ -334,22 +310,9 @@ export class ConsultaFlow {
     return emit({ kind: "text", text: modo === "chofer" ? CONSULTA.pedirDniPara(destino) : CONSULTA.pedirPatentePara(destino) });
   }
 
-  private esSaludo(texto: string): boolean {
-    return /^(hola+|buenas|buen dia|buenos dias|buenas tardes|buenas noches|hey|que tal)\b/.test(normalizeText(texto));
-  }
-
-  /** Toma cliente/subcliente del botón o del texto ("total planta 1", "y en vista?"). */
-  private aplicarClienteSubcliente(st: ConsultaState, texto: string, payload: string | undefined, clientes: Cliente[]): { reconocio: boolean; subclienteInvalido: boolean } {
-    if (payload?.startsWith("cli:")) {
-      st.clienteCodigo = payload.slice(4);
-      st.plantaCodigo = undefined;
-      return { reconocio: true, subclienteInvalido: false };
-    }
-    if (payload?.startsWith("pla:")) {
-      st.plantaCodigo = payload.slice(4);
-      return { reconocio: true, subclienteInvalido: false };
-    }
-    if (!texto.trim()) return { reconocio: false, subclienteInvalido: false };
+  /** Cambio de planta escrito en medio de la consulta ("y en vista planta 2?"). Sólo coincidencias exactas. */
+  private aplicarClienteSubcliente(st: ConsultaState, texto: string, clientes: Cliente[]): { reconocio: boolean } {
+    if (!texto.trim()) return { reconocio: false };
     const cliente = resolverCliente(texto, clientes);
     if (cliente) {
       if (cliente.codigo !== st.clienteCodigo) st.plantaCodigo = undefined;
@@ -358,27 +321,17 @@ export class ConsultaFlow {
     const actual = clientes.find((c) => c.codigo === st.clienteCodigo);
     const planta = actual ? resolverPlanta(texto, actual) : undefined;
     if (planta) st.plantaCodigo = planta.codigo;
-    // Nombró el cliente y algo que parece un subcliente que no existe ("total planta 9").
-    const subclienteInvalido = Boolean(cliente && !planta && /\b(planta|pta|pl|subcliente)\b|\bp\s*\d/.test(normalizeText(texto)));
-    if (subclienteInvalido) st.plantaCodigo = undefined;
-    return { reconocio: Boolean(cliente || planta), subclienteInvalido };
+    return { reconocio: Boolean(cliente || planta) };
   }
 
-  private pedirCliente(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> {
+  private pedirCliente(st: ConsultaState, emit: Emit): Promise<void> {
     st.pidioPlanta = true;
-    // Con pocos clientes, también se ofrecen como botones.
-    if (clientes.length > 0 && clientes.length <= 3) {
-      return emit({ kind: "buttons", text: CONSULTA.pedirClienteSubcliente, buttons: clientes.map((c) => ({ title: buttonTitle(nombreCorto(c.nombre)), payload: `cli:${c.codigo}` })) });
-    }
     return emit({ kind: "text", text: CONSULTA.pedirClienteSubcliente });
   }
 
-  private pedirPlanta(cliente: Cliente, emit: Emit): Promise<void> {
-    const titulo = CONSULTA.elegirPlanta(nombreCorto(cliente.nombre));
-    if (cliente.plantas.length <= 3) {
-      return emit({ kind: "buttons", text: titulo, buttons: cliente.plantas.map((p) => ({ title: buttonTitle(p.nombre), payload: `pla:${p.codigo}` })) });
-    }
-    return emit({ kind: "text", text: `${titulo}\n${cliente.plantas.map((p) => `• ${p.nombre}`).join("\n")}` });
+  private pedirPlanta(st: ConsultaState, cliente: Cliente, emit: Emit): Promise<void> {
+    st.pidioPlanta = true;
+    return emit({ kind: "text", text: DESTINO.elegirPlanta(nombreCorto(cliente.nombre)) });
   }
 
   /** Consulta en el cliente y subcliente declarados; guarda el ID del carnet. */

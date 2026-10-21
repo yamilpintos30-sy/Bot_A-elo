@@ -59,6 +59,9 @@ export interface CargadorState {
   loteId?: string;
   /** Ya se cargó un tipo y se ofrece cargar el otro tipo del mismo documento. */
   ofreciendoOtro?: boolean;
+  /** "¿Quisiste decir ...?" pendiente (cliente y subcliente). */
+  sugerencia?: { clienteCodigo: string; plantaCodigo?: string };
+  pidioPlanta?: boolean;
 }
 
 /** Una credencial encontrada en la última consulta (para el botón "Ver carnet"). */
@@ -83,6 +86,8 @@ export interface ConsultaState {
   plantaCodigo?: string;
   /** Ya se le pidió la planta (para avisar "no encontré ese cliente" sólo después). */
   pidioPlanta?: boolean;
+  /** "¿Quisiste decir ...?" pendiente (cliente y subcliente). */
+  sugerencia?: { clienteCodigo: string; plantaCodigo?: string };
   /**
    * Rama elegida en el menú principal:
    *   habilitacion -> cliente y subcliente -> por DNI o por dominio

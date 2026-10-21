@@ -223,19 +223,58 @@ describe("cargador", () => {
     expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
   });
 
-  it("cliente inexistente: lo dice y muestra los disponibles", async () => {
+  it("cliente inexistente: lo dice SIN listar los clientes", async () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "Shell planta 2");
-    expect(texts(outs)).toMatch(/No encontré ese cliente.*Total Austral.*Vista Energy/s);
+    expect(texts(outs)).toMatch(/No encontré ese cliente\. Escribí de nuevo \*cliente y subcliente\*/);
+    expect(texts(outs)).not.toMatch(/Total Austral|Vista Energy/);
   });
 
-  it("subcliente inexistente: lo dice y ofrece los del cliente", async () => {
+  it("subcliente inexistente: lo dice SIN listar las plantas", async () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "total planta 9");
-    expect(texts(outs)).toMatch(/No encontré ese subcliente en Total Austral/);
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    expect(texts(outs)).toMatch(/No encontré ese subcliente en \*Total Austral\*/);
+    expect(texts(outs)).not.toMatch(/Planta 2/);
+  });
+
+  it("solo el cliente: pregunta el subcliente por texto, sin botones de plantas", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "Total");
+    expect(texts(outs)).toMatch(/Qué subcliente \(planta\) de \*Total Austral\*/);
+    expect(buttons(outs)).not.toContain("Planta 1");
+  });
+
+  it("mal escrito: '¿Quisiste decir...?' -> Sí -> sigue con ese cliente y subcliente", async () => {
+    const { say, procesar } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    let outs = await say(CARGADOR, "tatal planta 1");
+    expect(texts(outs)).toMatch(/Quisiste decir \*Total Austral – Planta 1\*/);
+    expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
+    outs = await say(CARGADOR, "✅ Sí");
+    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    outs = await say(CARGADOR, "", [pdfAdj()]);
+    expect(procesar).toHaveBeenCalledTimes(1);
+  });
+
+  it("mal escrito: '¿Quisiste decir...?' -> No -> lo vuelve a pedir", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "vistaa energi 1");
+    let outs = await say(CARGADOR, "✏️ No");
+    expect(texts(outs)).toMatch(/escribí de nuevo \*cliente y subcliente\*/);
+    outs = await say(CARGADOR, "Total planta 2");
+    expect(texts(outs)).toMatch(/encontrados: \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
+  });
+
+  it("no adivina: algo que no se parece a ningún cliente no sugiere nada", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    const outs = await say(CARGADOR, "pluspetrol planta 1");
+    expect(texts(outs)).not.toMatch(/Quisiste decir/);
+    expect(texts(outs)).toMatch(/No encontré ese cliente/);
   });
 
   it("FILTRO DE TIPO: eligió dominios y el PDF es de choferes -> avisa y no carga", async () => {
@@ -396,7 +435,6 @@ describe("chofer", () => {
   const MENU_HAB = ["🪪 Por DNI", "🚛 Por dominio", "Menú 😊"];
   const MENU_VEH = ["📄 VTV", "🛡️ Seguro", "Menú 😊"];
   const FIN_CONSULTA = ["Menú 😊", "🔎 Consulta", "Eso es todo, gracias"];
-  const CLIENTES_BTN = ["Total Austral", "Vista Energy"];
 
   /** Saludo -> Habilitación -> planta: queda en [Por DNI] [Por dominio] [Menú]. */
   async function enPlanta(say: Awaited<ReturnType<typeof setup>>["say"], planta = "Total planta 1") {
@@ -433,7 +471,7 @@ describe("chofer", () => {
 
     let outs = await say(CHOFER, "🪪 Habilitación");
     expect(texts(outs)).toMatch(/A qué planta vas a ingresar/);
-    expect(buttons(outs)).toEqual(CLIENTES_BTN);
+    expect(texts(outs) + buttons(outs).join()).not.toMatch(/Total Austral|Vista Energy/); // sin opciones
 
     outs = await say(CHOFER, "Total planta 1");
     expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*.*DNI.*dominio/s);
@@ -577,7 +615,8 @@ describe("chofer", () => {
     await say(CHOFER, "hola");
     await say(CHOFER, "🪪 Habilitación");
     let outs = await say(CHOFER, "Total Austral");
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    expect(texts(outs)).toMatch(/Qué subcliente \(planta\) de \*Total Austral\*/);
+    expect(buttons(outs)).not.toContain("Planta 1");
     outs = await say(CHOFER, "Planta 2");
     expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 2\*/);
     expect(buttons(outs)).toEqual(MENU_HAB);
@@ -588,15 +627,28 @@ describe("chofer", () => {
     expect(texts(outs)).toMatch(/✅ \*VISTA ENERGY \(PRUEBA\) – Planta 1\*/);
   });
 
-  it("cliente o subcliente inexistentes: lo dice y ofrece los disponibles", async () => {
+  it("cliente o subcliente inexistentes: lo dice sin listar opciones", async () => {
     const { say } = setup();
     await say(CHOFER, "hola");
     await say(CHOFER, "🪪 Habilitación");
     let outs = await say(CHOFER, "Shell planta 2");
-    expect(texts(outs)).toMatch(/No encontré ese cliente.*Total Austral.*Vista Energy/s);
+    expect(texts(outs)).toMatch(/No encontré ese cliente/);
+    expect(texts(outs)).not.toMatch(/Total Austral|Vista Energy/);
     outs = await say(CHOFER, "total planta 9");
-    expect(texts(outs)).toMatch(/No encontré ese subcliente en Total Austral/);
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    expect(texts(outs)).toMatch(/No encontré ese subcliente en \*Total Austral\*/);
+    expect(texts(outs)).not.toMatch(/Planta 2/);
+  });
+
+  it("mal escrito: '¿Quisiste decir...?' -> Sí -> opciones de habilitación en esa planta", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    await say(CHOFER, "🪪 Habilitación");
+    let outs = await say(CHOFER, "tatal planta 1");
+    expect(texts(outs)).toMatch(/Quisiste decir \*Total Austral – Planta 1\*/);
+    expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
+    outs = await say(CHOFER, "si");
+    expect(texts(outs)).toMatch(/✅ \*TOTAL AUSTRAL \(PRUEBA\) – Planta 1\*/);
+    expect(buttons(outs)).toEqual(MENU_HAB);
   });
 
   it("DNI inválido después de elegir Por DNI", async () => {

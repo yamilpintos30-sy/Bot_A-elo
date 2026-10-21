@@ -17,7 +17,8 @@ import type { CarnetListo } from "../extraction/review.js";
 import type { Cliente } from "../storage/catalogo.js";
 import type { CarnetRegistrado } from "../storage/registro.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
-import { buscar, etiqueta, nombreCorto, resolverCliente, resolverPlanta } from "./catalogo.js";
+import { buscar, etiqueta } from "./catalogo.js";
+import { pasoDestino } from "./pasoDestino.js";
 import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
 import type { BotDeps, Emit, LotePendiente } from "./deps.js";
 import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
@@ -80,29 +81,19 @@ export class CargadorFlow {
     // 1) Menú: choferes o dominios.
     const tipo = payload?.startsWith("tipo:") ? (payload.slice(5) as TipoRegistro) : tipoEscrito(msg.text);
     if (tipo) {
-      session.cargador = { etapa: "esperando_datos", tipo, archivos: st.archivos };
+      session.cargador = { etapa: "esperando_datos", tipo, archivos: st.archivos, pidioPlanta: true };
       return emit({ kind: "text", text: CARGA.pedirClienteSubcliente(tipo) });
     }
     if (!st.tipo) return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
 
-    // 2) Cliente y subcliente, cotejados contra la tabla.
+    // 2) Cliente y subcliente, cotejados contra la tabla (sin listas: "¿quisiste decir...?").
     const clientes = await this.deps.catalogo.listar();
-    const reconocio = this.aplicarClienteSubcliente(st, msg, payload, clientes);
-    const elegido = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-
-    if (!elegido.cliente) {
-      if (msg.text.trim() && !reconocio) return emit({ kind: "text", text: CARGA.clienteNoEncontrado(clientes.map((c) => nombreCorto(c.nombre))) });
-      return emit({ kind: "text", text: CARGA.pedirClienteSubcliente(st.tipo) });
+    const paso = pasoDestino(st, msg.text, payload, clientes, CARGA.pedirClienteSubcliente(st.tipo));
+    if (!paso.listo) {
+      for (const out of paso.salida) await emit(out);
+      return;
     }
-    if (!elegido.planta) {
-      const cliente = elegido.cliente;
-      if (this.mencionaSubcliente(msg.text, cliente)) {
-        await emit({ kind: "text", text: CARGA.plantaNoEncontrada(nombreCorto(cliente.nombre), cliente.plantas.map((p) => p.nombre)) });
-      } else if (cliente.plantas.length === 1) {
-        st.plantaCodigo = cliente.plantas[0]!.codigo;
-      }
-      if (!st.plantaCodigo) return this.pedirPlanta(cliente, emit);
-    }
+    const reconocio = paso.reconocio;
     const destino = etiqueta(...this.par(clientes, st));
 
     // 3) PDF.
@@ -114,39 +105,6 @@ export class CargadorFlow {
   private par(clientes: Cliente[], st: CargadorState) {
     const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
     return [b.cliente, b.planta] as const;
-  }
-
-  /** Toma cliente/subcliente del botón o del texto. Devuelve si reconoció algo nuevo. */
-  private aplicarClienteSubcliente(st: CargadorState, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[]): boolean {
-    if (payload?.startsWith("pla:")) {
-      st.plantaCodigo = payload.slice(4);
-      return true;
-    }
-    if (!msg.text.trim()) return false;
-    const cliente = resolverCliente(msg.text, clientes);
-    if (cliente) {
-      if (cliente.codigo !== st.clienteCodigo) st.plantaCodigo = undefined;
-      st.clienteCodigo = cliente.codigo;
-    }
-    const actual = clientes.find((c) => c.codigo === st.clienteCodigo);
-    const planta = actual ? resolverPlanta(msg.text, actual) : undefined;
-    if (planta) st.plantaCodigo = planta.codigo;
-    return Boolean(cliente || planta);
-  }
-
-  /** ¿El texto nombra un subcliente (que no se encontró)? Ej. "total planta 9". */
-  private mencionaSubcliente(texto: string, cliente: Cliente): boolean {
-    const t = normalizeText(texto);
-    const sinCliente = [cliente.codigo, normalizeText(cliente.nombre), ...cliente.alias.map(normalizeText)].reduce((acc, a) => acc.replace(a, " "), t).trim();
-    return /\b(planta|pta|pl)\b|\bp\s*\d|\d/.test(sinCliente);
-  }
-
-  private async pedirPlanta(cliente: Cliente, emit: Emit): Promise<void> {
-    const titulo = CARGA.elegirPlanta(nombreCorto(cliente.nombre));
-    if (cliente.plantas.length <= 3) {
-      return emit({ kind: "buttons", text: titulo, buttons: cliente.plantas.map((p) => ({ title: buttonTitle(p.nombre), payload: `pla:${p.codigo}` })) });
-    }
-    return emit({ kind: "text", text: CARGA.listaOpciones(titulo, cliente.plantas.map((p) => p.nombre)) });
   }
 
   // --- Procesamiento ---------------------------------------------------------------

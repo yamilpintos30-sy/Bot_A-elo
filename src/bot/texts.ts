@@ -64,15 +64,20 @@ export const TIPO = {
 const deTipo = (tipo: "chofer" | "dominio", listado: boolean) => (listado ? TIPO[tipo].registros : TIPO[tipo].carnets);
 const unidad = (n: number, listado: boolean) => `${listado ? "registro" : "carnet"}${n === 1 ? "" : "s"}`;
 
+/** Cliente y subcliente (carga y consulta): solo texto, sin listas de opciones. */
+export const DESTINO = {
+  elegirPlanta: (cliente: string) => `¿Qué subcliente (planta) de *${cliente}*? Ejemplo: *Planta 1*`,
+  clienteNoEncontrado: "❌ No encontré ese cliente. Escribí de nuevo *cliente y subcliente*. Ejemplo: *Total Planta 1*",
+  plantaNoEncontrada: (cliente: string) => `❌ No encontré ese subcliente en *${cliente}*. Escribilo de nuevo. Ejemplo: *Planta 1*`,
+  quisisteDecir: (destino: string) => `🤔 ¿Quisiste decir *${destino}*?`,
+  reescribir: "Dale, escribí de nuevo *cliente y subcliente*. Ejemplo: *Total Planta 1*",
+};
+
 export const CARGA = {
   menu: "¿Qué documentación vas a cargar?",
   otraCarga: "¿Querés cargar otra documentación?",
   pedirClienteSubcliente: (tipo: "chofer" | "dominio") =>
     `${TIPO[tipo].emoji} Carga de *${TIPO[tipo].plural}*.\nIndicá *cliente y subcliente*. Ejemplo: *Total Planta 1*`,
-  clienteNoEncontrado: (clientes: string[]) => `❌ No encontré ese cliente. Clientes disponibles:\n${clientes.map((c) => `• ${c}`).join("\n")}\nVolvé a escribir cliente y subcliente.`,
-  elegirPlanta: (cliente: string) => `¿Qué subcliente de ${cliente}?`,
-  listaOpciones: (titulo: string, opciones: string[]) => `${titulo}\nEscribí una de estas opciones:\n${opciones.map((o) => `• ${o}`).join("\n")}`,
-  plantaNoEncontrada: (cliente: string, plantas: string[]) => `❌ No encontré ese subcliente en ${cliente}. Subclientes: ${plantas.join(", ")}.`,
   encontrado: (destino: string, tipo: "chofer" | "dominio") => `✅ Cliente y subcliente encontrados: *${destino}*.\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,
   soloPdf: "Solo se aceptan archivos PDF o fotos (JPG o PNG) de los carnets.",
   /** Todavía no se sabe si son carnets o un listado: texto neutro. */
@@ -160,9 +165,6 @@ export const CONSULTA = {
   saludo: (bot: string, nombre?: string | null) =>
     nombre ? `¡Hola, ${nombre}! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*` : `¡Hola! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*`,
   pedirClienteSubcliente: "¿A qué planta vas a ingresar? Escribí *cliente y subcliente*.\nEjemplo: *Total Planta 1*",
-  elegirPlanta: (cliente: string) => `¿Qué subcliente (planta) de ${cliente}?`,
-  clienteNoEncontrado: (clientes: string[]) => `❌ No encontré ese cliente. Clientes disponibles:\n${clientes.map((c) => `• ${c}`).join("\n")}\nVolvé a escribir cliente y subcliente.`,
-  plantaNoEncontrada: (cliente: string, plantas: string[]) => `❌ No encontré ese subcliente en ${cliente}. Subclientes: ${plantas.join(", ")}.`,
   /** Menú principal: dos ramas. */
   menuPrincipal: [
     "¿Qué querés consultar?",
