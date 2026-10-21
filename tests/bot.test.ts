@@ -365,22 +365,25 @@ describe("cargador", () => {
     expect(seawhite.cargas).toHaveLength(0);
   });
 
-  it("AVISOS: un renglón por registro, sólo vencidos (con qué vence) o situaciones anormales", async () => {
+  it("AVISOS: 'No habilitados hoy', un renglón por registro; los habilitados no aparecen", async () => {
     const { say } = setup({
       procesar: async () =>
         resultado([
-          carnet("33919536", "31-10-2026", { motivoVencimiento: "seguro ART" }), // al día: sin aviso
-          carnet("33615450", "23-09-2026", { vencido: true, motivoVencimiento: "licencia de conducir" }),
-          carnet("24157723", "29-10-2026", { observaciones: "Inhabilitado: trámite incompleto" }),
+          carnet("33919536", "31-10-2026", { motivoVencimiento: "Seguro ART" }), // habilitado: sin aviso
+          carnet("33615450", "23-09-2026", { vencido: true, motivoVencimiento: "Licencia de conducir" }),
+          carnet("44444444", "04-09-2026", { vencido: true, motivoVencimiento: "Trámite incompleto", observaciones: "Inhabilitado (trámite incompleto)" }),
+          carnet("24157723", "29-10-2027", { observaciones: "Inhabilitado para conducir" }), // habilitado con una restricción
         ]),
     });
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "Total planta 1", [pdfAdj()]);
     const t = texts(outs);
-    expect(t).toMatch(/• PERSONA 33615450 \(33615450\): vencido el 23\/09\/2026 \(licencia de conducir\)/);
-    expect(t).toMatch(/• PERSONA 24157723 \(24157723\): Inhabilitado: trámite incompleto/);
-    expect(t).not.toMatch(/33919536\): /); // el que está al día no aparece en avisos
-    expect(t.match(/33615450\): /g)).toHaveLength(1); // un solo renglón por persona
+    expect(t).toMatch(
+      /⚠️ No habilitados hoy:\n• PERSONA 33615450 \(33615450\): habilitado hasta el 23\/09\/2026 \(licencia de conducir\)\n• PERSONA 44444444 \(44444444\): inhabilitado \(trámite incompleto\)/,
+    );
+    expect(t).toMatch(/⚠️ Avisos:\n• PERSONA 24157723 \(24157723\): Inhabilitado para conducir/);
+    expect(t).not.toMatch(/33919536\): /); // el habilitado no aparece
+    expect(t.match(/44444444\): /g)).toHaveLength(1); // un solo renglón por registro
   });
 
   it("REGISTRO: Cancelar o 'Eso es todo' con la carga pendiente -> cancelada (no queda 'procesando')", async () => {

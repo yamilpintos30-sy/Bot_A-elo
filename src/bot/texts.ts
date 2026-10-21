@@ -119,6 +119,11 @@ function lineaRechazo(r: CarnetRechazado): string {
   return `• ${[donde, quien].filter(Boolean).join(" – ") || "—"}: ${r.motivo}`;
 }
 
+/** "Licencia de conducir" -> "licencia de conducir"; las siglas ("VTV/RIEDES") quedan igual. */
+function minusculaInicial(texto: string): string {
+  return /^\p{Lu}\p{Ll}/u.test(texto) ? texto.charAt(0).toLowerCase() + texto.slice(1) : texto;
+}
+
 function nombreCarnet(c: CarnetListo): string {
   return c.apellidoNombre ? `${c.apellidoNombre} (${c.identificador})` : c.identificador;
 }
@@ -130,14 +135,17 @@ export function resumenParaConfirmar(destino: string, aceptados: CarnetListo[], 
   const partes = [personas ? `${personas} persona${personas === 1 ? "" : "s"}` : "", vehiculos ? `${vehiculos} vehículo${vehiculos === 1 ? "" : "s"}` : ""].filter(Boolean);
   const lineas = [`📋 *${destino}*`, `✅ ${aceptados.length} listo${aceptados.length === 1 ? "" : "s"} para cargar (${partes.join(", ")})`];
 
-  // Un renglón por registro y sólo lo que hay que mirar: vencido (con qué vence) o una situación anormal.
-  const avisos = aceptados.flatMap((c) => {
-    const partes = [
-      c.vencido ? `vencido el ${fecha(c.vencimiento)}${c.motivoVencimiento ? ` (${c.motivoVencimiento})` : ""}` : "",
-      c.observaciones ?? "",
-    ].filter(Boolean);
-    return partes.length ? [`• ${nombreCarnet(c)}: ${partes.join(". ")}`] : [];
-  });
+  // Lo que importa es si está habilitado: un renglón por registro, sólo los que no lo están hoy.
+  // Si hay una situación anormal (inhabilitado), se dice eso; si no, hasta cuándo estuvo habilitado.
+  const noHabilitados = aceptados
+    .filter((c) => c.vencido)
+    .map((c) => {
+      const motivo = c.motivoVencimiento ? ` (${minusculaInicial(c.motivoVencimiento)})` : "";
+      return `• ${nombreCarnet(c)}: ${c.observaciones ? minusculaInicial(c.observaciones) : `habilitado hasta el ${fecha(c.vencimiento)}${motivo}`}`;
+    });
+  // Habilitados pero con algo para mirar (por ejemplo, una restricción del carnet).
+  const avisos = aceptados.filter((c) => !c.vencido && c.observaciones).map((c) => `• ${nombreCarnet(c)}: ${c.observaciones}`);
+  if (noHabilitados.length) lineas.push("", "⚠️ No habilitados hoy:", ...noHabilitados);
   if (avisos.length) lineas.push("", "⚠️ Avisos:", ...avisos);
   if (rechazados.length) lineas.push("", `❌ ${rechazados.length} no se van a cargar:`, ...rechazados.map(lineaRechazo));
   lineas.push("", "¿Confirmás la carga?");
