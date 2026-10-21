@@ -1,8 +1,9 @@
 /**
  * Motor del bot: decide qué flujo atiende cada mensaje y guarda la sesión.
  *
- *   - El rol se decide EN CADA MENSAJE con la lista de cargadores: si se sube
- *     un .txt nuevo, rige desde el mensaje siguiente.
+ *   - El rol se decide EN CADA MENSAJE con las listas del panel: cargadores
+ *     (cargan) y consultores (consultan). App cerrada: a un número que no está
+ *     en ninguna no se le responde. Un .txt nuevo rige desde el mensaje siguiente.
  *   - Los botones de WhatsApp vuelven como texto con su TÍTULO: se traducen a
  *     su payload con los botones del último mensaje de la sesión.
  *   - Como en Enri: toda respuesta cierra con [Menú 😊] [Eso es todo, gracias];
@@ -70,10 +71,22 @@ export class BotEngine {
       return;
     }
 
-    const esCargador = await deps.cargadores.esCargador(msg.phone).catch((err) => {
-      deps.logger.error({ err }, "No se pudo leer la lista de cargadores; se atiende como consulta");
+    const esCargador = await deps.cargadores.contiene(msg.phone).catch((err) => {
+      deps.logger.error({ err }, "No se pudo leer la lista de cargadores");
       return false;
     });
+    // App cerrada: si no carga ni está en la lista de los que pueden consultar,
+    // no se le responde nada (ni saludo). Si la lista no se puede leer, tampoco.
+    if (!esCargador) {
+      const puedeConsultar = await deps.consultores.contiene(msg.phone).catch((err) => {
+        deps.logger.error({ err }, "No se pudo leer la lista de consultores; por seguridad no se responde");
+        return false;
+      });
+      if (!puedeConsultar) {
+        deps.logger.info({ conversationId: msg.conversationId }, "Número no habilitado para consultar: no se responde");
+        return;
+      }
+    }
     session.rol = esCargador ? "cargador" : "consulta";
 
     const payload = this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined);

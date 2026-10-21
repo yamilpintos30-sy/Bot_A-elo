@@ -13,7 +13,7 @@ import type { IncomingAttachment, IncomingMessage, Outbound } from "../src/bot/t
 import type { OnEtapa, ProcesamientoResultado } from "../src/extraction/procesarCarnets.js";
 import type { CarnetListo } from "../src/extraction/review.js";
 import type { Consulta, RegistroCarga, ResumenCarga, TipoRegistro } from "../src/integrations/seawhite/types.js";
-import { MemoryCargadores } from "../src/storage/cargadores.js";
+import { MemoryListaTelefonos } from "../src/storage/cargadores.js";
 import { MemoryFallas } from "../src/storage/fallas.js";
 import type { ResultadoVerificacion } from "../src/extraction/verificadorComprobantes.js";
 import { MemoryCatalogo, type Cliente } from "../src/storage/catalogo.js";
@@ -24,6 +24,8 @@ const logger = pino({ level: "silent" });
 const PDF = Buffer.from("%PDF-1.4\n%x\n");
 const CARGADOR = "+5492914413200";
 const CHOFER = "+5492995551234";
+/** Números habilitados para consultar (la app es cerrada). */
+const CONSULTORES = ["2995551234", "2994440000"];
 const HOY = new Date("2026-10-15T12:00:00-03:00");
 
 const CLIENTES: Cliente[] = [
@@ -114,7 +116,8 @@ function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVe
     botName: "Javier",
     timezone: "America/Argentina/Buenos_Aires",
     catalogo: new MemoryCatalogo(CLIENTES),
-    cargadores: new MemoryCargadores(["2914413200"]),
+    cargadores: new MemoryListaTelefonos(["2914413200"]),
+    consultores: new MemoryListaTelefonos(CONSULTORES),
     registro,
     sessions: new MemorySessions(),
     log: new NoopMessageLog(),
@@ -846,6 +849,38 @@ describe("pie y cierre (como Enri)", () => {
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "Menú 😊");
     expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+  });
+});
+
+describe("app cerrada: sólo responde a los números de las listas", () => {
+  it("un número que no es cargador ni está en la lista de consultas: no se le responde nada", async () => {
+    const { say, sent } = setup();
+    const outs = await say("+5491155550000", "hola", [], "c-desconocido");
+    expect(outs).toEqual([]);
+    expect(await say("+5491155550000", "33615617", [], "c-desconocido")).toEqual([]);
+    expect(await say("+5491155550000", "", [pdfAdj()], "c-desconocido")).toEqual([]);
+    expect(sent.filter((s) => s.conversationId === "c-desconocido")).toEqual([]);
+  });
+
+  it("si la lista de consultas no se puede leer, por seguridad tampoco responde", async () => {
+    const { say, deps } = setup();
+    deps.consultores = { contiene: async () => Promise.reject(new Error("Supabase caído")), listar: async () => [], reemplazar: async () => undefined };
+    expect(await say(CHOFER, "hola")).toEqual([]);
+  });
+
+  it("los cargadores no necesitan estar en la lista de consultas", async () => {
+    const { say, deps } = setup();
+    deps.consultores = new MemoryListaTelefonos([]);
+    const outs = await say(CARGADOR, "hola");
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+  });
+
+  it("un número agregado a la lista rige desde el mensaje siguiente", async () => {
+    const { say, deps } = setup();
+    expect(await say("+5491155550000", "hola", [], "c-nuevo")).toEqual([]);
+    await deps.consultores.reemplazar([...CONSULTORES, "1155550000"]);
+    const outs = await say("+5491155550000", "hola", [], "c-nuevo");
+    expect(outs[0]!.kind).toBe("image"); // saludo
   });
 });
 

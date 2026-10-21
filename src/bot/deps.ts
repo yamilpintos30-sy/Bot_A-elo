@@ -5,7 +5,7 @@
 import type { OnEtapa, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
 import type { Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { ResultadoVerificacion } from "../extraction/verificadorComprobantes.js";
-import type { CargadoresRepo } from "../storage/cargadores.js";
+import type { ListaTelefonos } from "../storage/cargadores.js";
 import type { FallasRepo } from "../storage/fallas.js";
 import type { CatalogoRepo } from "../storage/catalogo.js";
 import type { RegistroRepo } from "../storage/registro.js";
@@ -33,7 +33,10 @@ export interface BotDeps {
   botName: string;
   timezone: string;
   catalogo: CatalogoRepo;
-  cargadores: CargadoresRepo;
+  /** Pueden cargar documentación. */
+  cargadores: ListaTelefonos;
+  /** Pueden consultar (choferes). Si un número no está en ninguna lista, no se le responde. */
+  consultores: ListaTelefonos;
   registro: RegistroRepo;
   sessions: SessionStore;
   log: MessageLog;

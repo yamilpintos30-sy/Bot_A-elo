@@ -11,7 +11,7 @@ import { ClaudeRunner } from "./extraction/claudeRunner.js";
 import { ProcesadorCarnets } from "./extraction/procesarCarnets.js";
 import { VerificadorComprobantes } from "./extraction/verificadorComprobantes.js";
 import { AneloClient } from "./integrations/seawhite/aneloClient.js";
-import { SupabaseCargadores } from "./storage/cargadores.js";
+import { SupabaseListaTelefonos } from "./storage/cargadores.js";
 import { SupabaseCatalogo } from "./storage/catalogo.js";
 import { SupabaseFallas } from "./storage/fallas.js";
 import { SupabaseRegistro } from "./storage/registro.js";
@@ -60,7 +60,8 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     botName: config.BOT_NAME,
     timezone: config.TIMEZONE,
     catalogo: new SupabaseCatalogo(supabase),
-    cargadores: new SupabaseCargadores(supabase),
+    cargadores: new SupabaseListaTelefonos(supabase, "anelo_cargadores"),
+    consultores: new SupabaseListaTelefonos(supabase, "anelo_consultores"),
     registro: new SupabaseRegistro(supabase),
     sessions: new SupabaseSessions(supabase),
     log: new SupabaseMessageLog(supabase, logger),
