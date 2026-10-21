@@ -155,6 +155,13 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
 
 // --- Choferes --------------------------------------------------------------------
 
+const CONSULTA_MENU = [
+  "¿Qué querés consultar?",
+  "🪪 *Por DNI*: credencial de ingreso a planta y vencimientos del chofer.",
+  "🚛 *Por dominio*: credencial de ingreso a planta y vencimientos del vehículo.",
+  "📄 *VTV* y 🛡️ *Seguro*: te mando el comprobante del vehículo.",
+].join("\n");
+
 export const CONSULTA = {
   /** Mismo saludo que Enri (con el nombre si se identificó el teléfono). */
   saludo: (bot: string, nombre?: string | null) =>
@@ -163,13 +170,9 @@ export const CONSULTA = {
   elegirPlanta: (cliente: string) => `¿Qué subcliente (planta) de ${cliente}?`,
   clienteNoEncontrado: (clientes: string[]) => `❌ No encontré ese cliente. Clientes disponibles:\n${clientes.map((c) => `• ${c}`).join("\n")}\nVolvé a escribir cliente y subcliente.`,
   plantaNoEncontrada: (cliente: string, plantas: string[]) => `❌ No encontré ese subcliente en ${cliente}. Subclientes: ${plantas.join(", ")}.`,
-  destinoOk: (destino: string) => `✅ *${destino}*.\n¿Qué documentación querés consultar?`,
-  menuPrincipal: [
-    "¿Qué querés consultar?",
-    "🪪 *Por DNI*: credencial de ingreso a planta y vencimientos del chofer.",
-    "🚛 *Por dominio*: credencial de ingreso a planta y vencimientos del vehículo.",
-    "📄 *VTV* y 🛡️ *Seguro*: te mando el comprobante del vehículo.",
-  ].join("\n"),
+  /** Planta elegida: se muestra con el menú de consultas. */
+  destinoOk: (destino: string) => `✅ *${destino}*.\n\n${CONSULTA_MENU}`,
+  menuPrincipal: CONSULTA_MENU,
   menu: "¿Qué documentación querés consultar?",
   pedirDni: "👤 Pasame el *DNI* del chofer (solo números, sin puntos).",
   pedirPatente: "🚛 Pasame la *patente* (dominio) del vehículo. Ejemplo: AA123BB",

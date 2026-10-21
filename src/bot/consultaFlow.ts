@@ -37,8 +37,6 @@ const MENU_PRINCIPAL: ButtonSpec[] = [
   { title: "🛡️ Seguro", payload: "m:seguro" },
   BOTON_FIN,
 ];
-/** [🔎 Consulta]: otra credencial en la misma planta. */
-const MENU_CREDENCIAL: ButtonSpec[] = [MENU_PRINCIPAL[0]!, MENU_PRINCIPAL[1]!, BOTON_FIN];
 const BOTON_CONSULTA: ButtonSpec = { title: "🔎 Consulta", payload: "consulta" };
 /** Cierre de una consulta de credencial: de cero, otra en la misma planta, o terminar. */
 const FIN_CONSULTA: ButtonSpec[] = [BOTON_MENU, BOTON_CONSULTA, BOTON_FIN];
@@ -72,24 +70,19 @@ export class ConsultaFlow {
 
     // --- Botones y comandos ---
     if (payload === "menu") {
-      // De cero: se olvidan DNI, dominio, cliente y subcliente.
+      // De cero: se olvidan DNI, dominio, cliente y subcliente (se vuelve a pedir la planta).
       session.consulta = { saludado: true };
-      return this.menuPrincipal(emit);
+      return this.pedirCliente(session.consulta, clientes, emit);
     }
     if (payload === "consulta") {
-      // Otra credencial en la MISMA planta.
+      // Otra consulta en la MISMA planta.
       st.modo = undefined;
       st.ultimos = undefined;
-      const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-      if (cliente && planta) return emit({ kind: "buttons", text: CONSULTA.destinoOk(etiqueta(cliente, planta)), buttons: MENU_CREDENCIAL });
-      return this.menuPrincipal(emit);
+      return this.retomar(st, clientes, emit);
     }
     if (payload === "carnet") return this.enviarCarnet(st, emit);
     if (payload === "nocarnet") return this.algoMas(emit, FIN_CONSULTA);
     if (payload === "otrodoc") return this.enviarOtroDoc(session, st, emit);
-
-    const elegido = payload?.startsWith("m:") ? (payload.slice(2) as Modo) : opcionEscrita(msg.text);
-    if (elegido) return this.elegir(st, elegido, clientes, emit);
 
     // Este número no recibe archivos (sólo los cargadores).
     if (msg.attachments.length > 0) {
@@ -97,18 +90,25 @@ export class ConsultaFlow {
       if (!msg.text.trim()) return this.retomar(st, clientes, emit);
     }
 
-    // --- Sin opción elegida: se deduce lo que se pueda o se muestra el menú ---
+    // --- 1. Primero la planta: cliente y subcliente, antes del menú ---
+    const destino = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    if (!destino.cliente || !destino.planta) return this.pasoPlanta(st, msg, payload, clientes, emit);
+
+    // --- 2. Con la planta elegida: menú de consultas ---
+    const elegido = payload?.startsWith("m:") ? (payload.slice(2) as Modo) : opcionEscrita(msg.text);
+    if (elegido) return this.elegir(st, elegido, clientes, emit);
+
     if (!st.modo) {
       const dni = findDniInText(msg.text);
       const patente = dni ? undefined : findPatenteInText(msg.text);
       if (dni || patente) {
-        // DNI o patente escritos de entrada: credencial (se piden cliente y subcliente si faltan).
+        // DNI o patente escritos sin tocar el menú: se consulta la credencial en la planta elegida.
         st.modo = dni ? "chofer" : "dominio";
         st.pendiente = { tipo: st.modo, identificador: (dni ?? patente)! };
       } else {
-        // "¿puedo entrar a total planta 1?": se recuerda la planta para después.
+        // Puede estar cambiando de planta ("y en vista?"); si no, se repite el menú.
         this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
-        return this.menuPrincipal(emit);
+        return this.retomar(st, clientes, emit);
       }
     }
 
@@ -139,23 +139,54 @@ export class ConsultaFlow {
   }
 
   private async elegir(st: ConsultaState, modo: Modo, clientes: Cliente[], emit: Emit): Promise<void> {
+    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    if (!cliente || !planta) return this.pedirCliente(st, clientes, emit);
     st.modo = modo;
     st.pendiente = undefined;
     st.ultimos = undefined;
     st.ultimoDominio = undefined;
     st.otroOfrecido = undefined;
     if (modo === "vtv" || modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(modo) });
-    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    if (cliente && planta) return this.pedirIdentificador(modo, etiqueta(cliente, planta), emit);
-    if (cliente) return this.pedirPlanta(cliente, emit);
-    return this.pedirCliente(clientes, emit);
+    return this.pedirIdentificador(modo, etiqueta(cliente, planta), emit);
   }
 
-  /** Tras un aviso (p. ej. "no se reciben archivos"), retoma el paso en el que estaba. */
+  /** Retoma el paso en el que estaba (tras un aviso, o con [🔎 Consulta]). */
   private retomar(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> {
-    if (!st.modo) return this.menuPrincipal(emit);
+    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    if (!cliente || !planta) return cliente ? this.pedirPlanta(cliente, emit) : this.pedirCliente(st, clientes, emit);
+    if (!st.modo) return this.menuDePlanta(etiqueta(cliente, planta), emit);
     if (st.modo === "vtv" || st.modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(st.modo) });
     return this.elegir(st, st.modo, clientes, emit);
+  }
+
+  private menuDePlanta(destino: string, emit: Emit): Promise<void> {
+    return emit({ kind: "buttons", text: CONSULTA.destinoOk(destino), buttons: MENU_PRINCIPAL });
+  }
+
+  /**
+   * Primer paso de toda consulta: cliente y subcliente. Hasta tenerlos no se
+   * muestra el menú (un DNI o una opción escritos antes no se toman).
+   */
+  private async pasoPlanta(st: ConsultaState, msg: IncomingMessage, payload: string | undefined, clientes: Cliente[], emit: Emit): Promise<void> {
+    const cambio = this.aplicarClienteSubcliente(st, msg.text, payload, clientes);
+    const { cliente } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    if (!cliente) {
+      const texto = msg.text.trim();
+      const esOtraCosa = texto && !cambio.reconocio && !this.esSaludo(texto) && !findDniInText(texto) && !findPatenteInText(texto) && !opcionEscrita(texto);
+      // "No encontré ese cliente" sólo si ya se le había pedido y escribió otra cosa.
+      if (st.pidioPlanta && esOtraCosa) await emit({ kind: "text", text: CONSULTA.clienteNoEncontrado(clientes.map((c) => nombreCorto(c.nombre))), sinPie: true });
+      return this.pedirCliente(st, clientes, emit);
+    }
+    if (!st.plantaCodigo) {
+      if (cambio.subclienteInvalido) {
+        await emit({ kind: "text", text: CONSULTA.plantaNoEncontrada(nombreCorto(cliente.nombre), cliente.plantas.map((p) => p.nombre)), sinPie: true });
+      } else if (cliente.plantas.length === 1) {
+        st.plantaCodigo = cliente.plantas[0]!.codigo;
+      }
+      if (!st.plantaCodigo) return this.pedirPlanta(cliente, emit);
+    }
+    const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    return this.menuDePlanta(etiqueta(b.cliente, b.planta), emit);
   }
 
   // --- VTV y seguro (sólo por dominio) ----------------------------------------------
@@ -229,11 +260,7 @@ export class ConsultaFlow {
       const id = modo === "chofer" ? findDniInText(msg.text) : findPatenteInText(msg.text);
       if (id) st.pendiente = { tipo: modo, identificador: id };
     }
-    if (!cliente) {
-      const escribioOtraCosa = msg.text.trim() && !cambio.reconocio && !st.pendiente && !this.esSaludo(msg.text);
-      if (escribioOtraCosa) await emit({ kind: "text", text: CONSULTA.clienteNoEncontrado(clientes.map((c) => nombreCorto(c.nombre))), sinPie: true });
-      return this.pedirCliente(clientes, emit);
-    }
+    if (!cliente) return this.pedirCliente(st, clientes, emit);
     if (!planta) {
       if (cambio.subclienteInvalido) {
         await emit({ kind: "text", text: CONSULTA.plantaNoEncontrada(nombreCorto(cliente.nombre), cliente.plantas.map((p) => p.nombre)), sinPie: true });
@@ -294,7 +321,8 @@ export class ConsultaFlow {
     return { reconocio: Boolean(cliente || planta), subclienteInvalido };
   }
 
-  private pedirCliente(clientes: Cliente[], emit: Emit): Promise<void> {
+  private pedirCliente(st: ConsultaState, clientes: Cliente[], emit: Emit): Promise<void> {
+    st.pidioPlanta = true;
     // Con pocos clientes, también se ofrecen como botones.
     if (clientes.length > 0 && clientes.length <= 3) {
       return emit({ kind: "buttons", text: CONSULTA.pedirClienteSubcliente, buttons: clientes.map((c) => ({ title: buttonTitle(nombreCorto(c.nombre)), payload: `cli:${c.codigo}` })) });

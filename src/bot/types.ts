@@ -81,6 +81,8 @@ export interface ConsultaState {
    */
   clienteCodigo?: string;
   plantaCodigo?: string;
+  /** Ya se le pidió la planta (para avisar "no encontré ese cliente" sólo después). */
+  pidioPlanta?: boolean;
   /**
    * Opción elegida en el menú principal:
    *   chofer / dominio -> credencial de ingreso (con cliente y subcliente) por DNI o patente
