@@ -16,7 +16,7 @@ import { CargadorFlow } from "./cargadorFlow.js";
 import { detectarComando, esSoloCortesia, PIE } from "./comandos.js";
 import { ConsultaFlow } from "./consultaFlow.js";
 import type { BotDeps } from "./deps.js";
-import { DESPEDIDA } from "./texts.js";
+import { DESPEDIDA, NO_HABILITADO } from "./texts.js";
 import type { IncomingMessage, Outbound, Session } from "./types.js";
 
 /** Canal de salida (Chatwoot en producción; un array en los tests). */
@@ -75,18 +75,19 @@ export class BotEngine {
       deps.logger.error({ err }, "No se pudo leer la lista de cargadores");
       return false;
     });
-    // App cerrada: si no carga ni está en la lista de los que pueden consultar,
-    // no se le responde nada (ni saludo). Si la lista no se puede leer, tampoco.
+    // App cerrada: si no carga ni está en la lista de los que pueden consultar, se
+    // le avisa UNA vez que no está habilitado y después no se le responde más.
+    // Si la lista no se puede leer, silencio (no se le dice "no habilitado" a
+    // alguien que quizás sí lo está).
     if (!esCargador) {
       const puedeConsultar = await deps.consultores.contiene(msg.phone).catch((err) => {
         deps.logger.error({ err }, "No se pudo leer la lista de consultores; por seguridad no se responde");
-        return false;
+        return null;
       });
-      if (!puedeConsultar) {
-        deps.logger.info({ conversationId: msg.conversationId }, "Número no habilitado para consultar: no se responde");
-        return;
-      }
+      if (puedeConsultar === null) return;
+      if (!puedeConsultar) return this.noHabilitado(session, msg);
     }
+    session.avisoNoHabilitado = undefined;
     session.rol = esCargador ? "cargador" : "consulta";
 
     const payload = this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined);
@@ -107,6 +108,21 @@ export class BotEngine {
         await deps.sessions.save(session).catch((err) => deps.logger.error({ err }, "No se pudo guardar la sesión"));
       }
     }
+  }
+
+  /** Número no habilitado: el aviso una sola vez (queda marcado en la sesión) y después silencio. */
+  private async noHabilitado(session: Session, msg: IncomingMessage): Promise<void> {
+    if (session.avisoNoHabilitado) {
+      this.deps.logger.info({ conversationId: msg.conversationId }, "Número no habilitado (ya avisado): no se responde");
+      return;
+    }
+    this.deps.logger.info({ conversationId: msg.conversationId }, "Número no habilitado: se manda el aviso una única vez");
+    session.avisoNoHabilitado = true;
+    const salida = this.salida(msg.conversationId, session);
+    await salida.emit({ kind: "text", text: NO_HABILITADO, sinPie: true });
+    await salida.terminar();
+    session.updatedAt = this.deps.now().toISOString();
+    await this.deps.sessions.save(session).catch((err) => this.deps.logger.error({ err }, "No se pudo guardar la sesión"));
   }
 
   /** "Eso es todo, gracias": despedida y conversación cerrada (la próxima arranca de cero). */

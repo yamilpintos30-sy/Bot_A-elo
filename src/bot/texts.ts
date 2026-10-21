@@ -44,6 +44,16 @@ export function vigente(valor: string | null | undefined, hoy: CalendarDate): bo
   return d !== null && diffDays(hoy, d) >= 0;
 }
 
+// --- Número no habilitado (app cerrada) ----------------------------------------------
+
+/** Se manda UNA vez por conversación; después, silencio. */
+export const NO_HABILITADO = [
+  "Este servicio es de uso exclusivo para personal autorizado de Sea White S.A.",
+  "El número de teléfono desde el cual se está comunicando no se encuentra habilitado para utilizar este servicio.",
+  "Si considera que debería tener acceso, comuníquese con el administrador del sistema.",
+  "*Sea White S.A.*",
+].join("\n");
+
 // --- Cierre ("Eso es todo, gracias") ------------------------------------------------
 
 export const DESPEDIDA = {

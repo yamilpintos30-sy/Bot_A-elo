@@ -121,5 +121,7 @@ export interface Session {
   botones: ButtonSpec[];
   /** Si es futuro, una persona tomó la conversación y el bot no responde. */
   handedOffUntil: string | null;
+  /** Número no habilitado al que ya se le mandó el aviso: no se le responde más. */
+  avisoNoHabilitado?: boolean;
   updatedAt: string;
 }

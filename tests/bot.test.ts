@@ -859,13 +859,21 @@ describe("pie y cierre (como Enri)", () => {
 });
 
 describe("app cerrada: sólo responde a los números de las listas", () => {
-  it("un número que no es cargador ni está en la lista de consultas: no se le responde nada", async () => {
-    const { say, sent } = setup();
+  it("un número no habilitado: recibe el aviso UNA vez y después no se le responde más", async () => {
+    const { say } = setup();
     const outs = await say("+5491155550000", "hola", [], "c-desconocido");
-    expect(outs).toEqual([]);
+    expect(outs).toHaveLength(1);
+    expect(outs[0]).toMatchObject({ kind: "text" });
+    expect(texts(outs)).toBe(
+      "Este servicio es de uso exclusivo para personal autorizado de Sea White S.A.\n" +
+        "El número de teléfono desde el cual se está comunicando no se encuentra habilitado para utilizar este servicio.\n" +
+        "Si considera que debería tener acceso, comuníquese con el administrador del sistema.\n" +
+        "*Sea White S.A.*",
+    );
+    expect(buttons(outs)).toEqual([]); // sin botones
     expect(await say("+5491155550000", "33615617", [], "c-desconocido")).toEqual([]);
     expect(await say("+5491155550000", "", [pdfAdj()], "c-desconocido")).toEqual([]);
-    expect(sent.filter((s) => s.conversationId === "c-desconocido")).toEqual([]);
+    expect(await say("+5491155550000", "hola??", [], "c-desconocido")).toEqual([]);
   });
 
   it("si la lista de consultas no se puede leer, por seguridad tampoco responde", async () => {
@@ -881,9 +889,9 @@ describe("app cerrada: sólo responde a los números de las listas", () => {
     expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 
-  it("un número agregado a la lista rige desde el mensaje siguiente", async () => {
+  it("un número agregado a la lista rige desde el mensaje siguiente (aunque ya haya recibido el aviso)", async () => {
     const { say, deps } = setup();
-    expect(await say("+5491155550000", "hola", [], "c-nuevo")).toEqual([]);
+    expect(texts(await say("+5491155550000", "hola", [], "c-nuevo"))).toMatch(/no se encuentra habilitado/);
     await deps.consultores.reemplazar([...CONSULTORES, "1155550000"]);
     const outs = await say("+5491155550000", "hola", [], "c-nuevo");
     expect(outs[0]!.kind).toBe("image"); // saludo
