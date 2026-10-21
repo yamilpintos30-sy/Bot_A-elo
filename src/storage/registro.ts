@@ -33,7 +33,11 @@ export interface NuevaCarga {
 }
 
 export interface CargaTerminada {
-  estado: "completada" | "con_errores" | "fallida";
+  /**
+   * cancelada: tocó Cancelar o cerró la conversación con la carga pendiente.
+   * sin_confirmar: nunca confirmó (expiró, o el bot se reinició en el medio).
+   */
+  estado: "completada" | "con_errores" | "fallida" | "cancelada" | "sin_confirmar";
   total: number;
   correctos: number;
   errores: number;
@@ -44,6 +48,8 @@ export interface CargaTerminada {
 export interface RegistroRepo {
   crearCarga(c: NuevaCarga): Promise<number | null>;
   terminarCarga(id: number | null, r: CargaTerminada): Promise<void>;
+  /** Cargas que siguen "procesando" desde antes de `antesDe`: quedaron colgadas (reinicio). Devuelve cuántas cerró. */
+  cerrarAbandonadas(antesDe: Date): Promise<number>;
   guardarCarnets(cargaId: number | null, carnets: CarnetRegistrado[]): Promise<void>;
   buscarCarnets(tipo: TipoRegistro, identificador: string): Promise<CarnetRegistrado[]>;
 }
@@ -76,6 +82,19 @@ export class SupabaseRegistro implements RegistroRepo {
         .eq("id", id),
       "terminar carga",
     );
+  }
+
+  async cerrarAbandonadas(antesDe: Date): Promise<number> {
+    const filas = check(
+      await this.db
+        .from("anelo_cargas")
+        .update({ estado: "sin_confirmar", finished_at: new Date().toISOString() })
+        .eq("estado", "procesando")
+        .lt("created_at", antesDe.toISOString())
+        .select("id"),
+      "cerrar cargas abandonadas",
+    ) as Array<{ id: number }>;
+    return filas.length;
   }
 
   async guardarCarnets(cargaId: number | null, carnets: CarnetRegistrado[]): Promise<void> {
@@ -126,16 +145,21 @@ export class SupabaseRegistro implements RegistroRepo {
 
 export class MemoryRegistro implements RegistroRepo {
   carnets: CarnetRegistrado[] = [];
-  cargas: Array<NuevaCarga & Partial<CargaTerminada> & { id: number }> = [];
+  cargas: Array<NuevaCarga & Partial<CargaTerminada> & { id: number; creada?: Date }> = [];
 
   async crearCarga(c: NuevaCarga): Promise<number> {
     const id = this.cargas.length + 1;
-    this.cargas.push({ ...c, id });
+    this.cargas.push({ ...c, id, creada: new Date() });
     return id;
   }
   async terminarCarga(id: number | null, r: CargaTerminada): Promise<void> {
     const c = this.cargas.find((x) => x.id === id);
     if (c) Object.assign(c, r);
+  }
+  async cerrarAbandonadas(antesDe: Date): Promise<number> {
+    const viejas = this.cargas.filter((c) => !c.estado && (c.creada ?? new Date(0)) < antesDe);
+    for (const c of viejas) c.estado = "sin_confirmar";
+    return viejas.length;
   }
   async guardarCarnets(_cargaId: number | null, carnets: CarnetRegistrado[]): Promise<void> {
     for (const c of carnets) {

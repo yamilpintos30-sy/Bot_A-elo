@@ -170,7 +170,7 @@ export class CargadorFlow {
 
     const lote: LotePendiente = { tipo, cargaId, clienteCodigo, plantaCodigo, destino, archivo: nombre, resultado };
     const loteId = this.deps.lotes.guardar(lote);
-    session.cargador = { etapa: "esperando_confirmacion", tipo, clienteCodigo, plantaCodigo, loteId };
+    session.cargador = { etapa: "esperando_confirmacion", tipo, clienteCodigo, plantaCodigo, loteId, cargaId };
     return this.mostrarResumen(lote, emit);
   }
 
@@ -197,6 +197,8 @@ export class CargadorFlow {
   private async enConfirmacion(session: Session, st: CargadorState, payload: string | undefined, emit: Emit): Promise<void> {
     const lote = this.deps.lotes.obtener(st.loteId);
     if (!lote) {
+      // Expiró (o el bot se reinició): no se cargó nada y queda registrado así.
+      if (!st.ofreciendoOtro) await this.cerrarRegistro(st.cargaId, "sin_confirmar", null);
       session.cargador = { etapa: "esperando_datos" };
       return this.conMenu(emit, CARGA.expirada);
     }
@@ -204,6 +206,14 @@ export class CargadorFlow {
     if (st.ofreciendoOtro) {
       if (payload === "cargarotro") {
         st.ofreciendoOtro = false;
+        // Registro aparte para el segundo tipo (el primero ya quedó cerrado).
+        lote.cargaId = await this.deps.registro
+          .crearCarga({ conversationId: session.conversationId, telefono: session.phone, clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo, archivo: lote.archivo })
+          .catch((err) => {
+            this.deps.logger.warn({ err }, "No se pudo registrar la carga (se sigue igual)");
+            return null;
+          });
+        st.cargaId = lote.cargaId;
         return this.mostrarResumen(lote, emit);
       }
       if (payload === "menu" || payload === "cancelar") {
@@ -215,6 +225,7 @@ export class CargadorFlow {
     }
     if (payload === "cancelar") {
       this.deps.lotes.borrar(st.loteId);
+      await this.cerrarRegistro(lote.cargaId, "cancelada", lote.resultado.costoUsd);
       session.cargador = { etapa: "esperando_datos" };
       return this.conMenu(emit, CARGA.cancelada);
     }
@@ -234,6 +245,14 @@ export class CargadorFlow {
     // (si el PDF era del otro tipo, vuelve el aviso con "Cargar ..." / "Cancelar").
     if (!hayDelTipo) return this.mostrarResumen(lote, emit);
     return emit({ kind: "buttons", text: CARGA.pendiente, buttons: [CONFIRMAR, CANCELAR] });
+  }
+
+  /** Cierra el registro de una carga que no llegó a SEA WHITE (cancelada o sin confirmar). */
+  async cerrarRegistro(cargaId: number | null | undefined, estado: "cancelada" | "sin_confirmar", costoUsd: number | null): Promise<void> {
+    if (cargaId == null) return;
+    await this.deps.registro
+      .terminarCarga(cargaId, { estado, total: 0, correctos: 0, errores: 0, costoUsd, detalle: {} })
+      .catch((err) => this.deps.logger.warn({ err, estado }, "No se pudo cerrar el registro de la carga"));
   }
 
   /** Botón para cargar el otro tipo del mismo documento. */
@@ -294,7 +313,8 @@ export class CargadorFlow {
     const cargados = [...(lote.tiposCargados ?? []), lote.tipo];
     const otro = otroTipo(lote.tipo);
     if (!cargados.includes(otro) && lote.resultado.aceptados.some((c) => c.tipo === otro)) {
-      const siguiente: LotePendiente = { ...lote, tipo: otro, tiposCargados: cargados };
+      // Sin registro hasta que toque "Cargar ..." (si no lo carga, no queda nada abierto).
+      const siguiente: LotePendiente = { ...lote, tipo: otro, tiposCargados: cargados, cargaId: null };
       const loteId = this.deps.lotes.guardar(siguiente);
       session.cargador = { etapa: "esperando_confirmacion", tipo: otro, clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo, loteId, ofreciendoOtro: true };
       await emit({ kind: "text", text: resultadoCarga(lote.destino, resumen), sinPie: true });

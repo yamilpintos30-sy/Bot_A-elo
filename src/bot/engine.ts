@@ -100,7 +100,9 @@ export class BotEngine {
   private async cerrar(session: Session, emit: (o: Outbound) => Promise<void>): Promise<void> {
     let texto = session.rol === "cargador" ? DESPEDIDA.cargador : DESPEDIDA.consulta;
     if (session.cargador?.loteId) {
+      const lote = this.deps.lotes.obtener(session.cargador.loteId);
       this.deps.lotes.borrar(session.cargador.loteId);
+      await this.cargador.cerrarRegistro(lote?.cargaId ?? session.cargador.cargaId, "cancelada", lote?.resultado.costoUsd ?? null);
       texto = DESPEDIDA.cargaCancelada;
     }
     this.cerradas.set(session.conversationId, this.deps.now().getTime());

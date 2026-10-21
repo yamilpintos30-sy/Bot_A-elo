@@ -365,6 +365,52 @@ describe("cargador", () => {
     expect(seawhite.cargas).toHaveLength(0);
   });
 
+  it("REGISTRO: Cancelar o 'Eso es todo' con la carga pendiente -> cancelada (no queda 'procesando')", async () => {
+    const { say, registro } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
+    await say(CARGADOR, "Cancelar");
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1", [pdfAdj("otro.pdf")]);
+    await say(CARGADOR, "Eso es todo, gracias");
+    expect(registro.cargas.map((c) => [c.archivo, c.estado])).toEqual([
+      ["carnets.pdf", "cancelada"],
+      ["otro.pdf", "cancelada"],
+    ]);
+  });
+
+  it("REGISTRO: si la carga pendiente expiró -> sin_confirmar", async () => {
+    const { say, registro, deps } = setup();
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
+    deps.lotes = new LotesPendientes(-1); // el lote ya no existe (expiró o el bot se reinició)
+    const outs = await say(CARGADOR, "Confirmar carga");
+    expect(texts(outs)).toMatch(/expiró/);
+    expect(registro.cargas[0]!.estado).toBe("sin_confirmar");
+  });
+
+  it("REGISTRO: documento mezclado -> un registro por tipo cargado", async () => {
+    const { say, registro } = setup({
+      procesar: async () => resultado([carnet("33615617", "18-10-2026"), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null, pagina: 2 })]),
+    });
+    await say(CARGADOR, "👤 Choferes");
+    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
+    await say(CARGADOR, "Confirmar carga");
+    await say(CARGADOR, "🚛 Cargar dominios");
+    await say(CARGADOR, "Confirmar carga");
+    expect(registro.cargas.map((c) => [c.estado, (c.detalle as { tipo?: string }).tipo])).toEqual([
+      ["completada", "chofer"],
+      ["completada", "dominio"],
+    ]);
+  });
+
+  it("REGISTRO: las que quedaron 'procesando' por un reinicio se cierran como sin_confirmar", async () => {
+    const registro = new MemoryRegistro();
+    await registro.crearCarga({ conversationId: "c1", telefono: null, clienteCodigo: "999991", plantaCodigo: "000001", archivo: "a.pdf" });
+    expect(await registro.cerrarAbandonadas(new Date(Date.now() + 1000))).toBe(1);
+    expect(registro.cargas[0]!.estado).toBe("sin_confirmar");
+  });
+
   it("con una carga pendiente de confirmar no acepta otra", async () => {
     const { say, procesar } = setup();
     await say(CARGADOR, "👤 Choferes");

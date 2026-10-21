@@ -21,6 +21,16 @@ async function main(): Promise<void> {
     .then((ok) => logger.info({ ok }, "Conexión con SEA WHITE verificada"))
     .catch((err) => logger.warn({ err: (err as Error).message }, "No se pudo verificar SEA WHITE al arrancar"));
 
+  // Cargas que quedaron "procesando" por un reinicio: más de 2 horas = abandonadas
+  // (procesar tarda minutos y una carga sin confirmar expira en 1 hora).
+  const cerrarAbandonadas = () =>
+    container.deps.registro
+      .cerrarAbandonadas(new Date(Date.now() - 2 * 60 * 60_000))
+      .then((n) => n > 0 && logger.info({ cargas: n }, "Cargas abandonadas marcadas como sin confirmar"))
+      .catch((err) => logger.warn({ err: (err as Error).message }, "No se pudieron cerrar las cargas abandonadas"));
+  void cerrarAbandonadas();
+  setInterval(() => void cerrarAbandonadas(), 30 * 60_000).unref();
+
   const app = createApp(container);
   const server = app.listen(config.PORT, () => {
     logger.info({ port: config.PORT }, `${config.BOT_NAME} escuchando`);

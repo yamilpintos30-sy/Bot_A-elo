@@ -57,6 +57,8 @@ export interface CargadorState {
   pdf?: { url: string; fileName: string };
   /** Id del lote procesado y pendiente de confirmar (en memoria). */
   loteId?: string;
+  /** Registro de la carga (anelo_cargas): se cierra aunque el lote ya no exista. */
+  cargaId?: number | null;
   /** Ya se cargó un tipo y se ofrece cargar el otro tipo del mismo documento. */
   ofreciendoOtro?: boolean;
   /** "¿Quisiste decir ...?" pendiente (cliente y subcliente). */
