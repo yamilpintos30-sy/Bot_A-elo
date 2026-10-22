@@ -56,14 +56,9 @@ services:
         sync: false
       - key: SEALINK_SERVIDOR
         value: "1"
-      # Carga habilitada SOLO en modo prueba (clientes 9999xx). Para operar con
-      # clientes reales: ANELO_MODO_PRUEBA=false (decisión de Yamil).
+      # Interruptor general de la carga en SEA WHITE (false = ningún POST sale).
       - key: ANELO_CARGA_HABILITADA
         value: "true"
-      - key: ANELO_MODO_PRUEBA
-        value: "true"
-      - key: ANELO_PREFIJO_PRUEBA
-        value: "9999"
 
       # --- Supabase (proyecto PROPIO del bot Añelo) ---
       - key: SUPABASE_URL

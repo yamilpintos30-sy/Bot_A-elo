@@ -3,11 +3,10 @@
  *
  * ╔══════════════════════════════════════════════════════════════════════════╗
  * ║  Consultas: libres (sólo lectura).                                         ║
- * ║  Carga (POST): EXCEPCIÓN AUTORIZADA a la Regla Nº 1, con 4 candados:       ║
+ * ║  Carga (POST): EXCEPCIÓN AUTORIZADA a la Regla Nº 1, con 3 candados:       ║
  * ║    1. Lista blanca por método + ruta (endpoints.ts).                       ║
  * ║    2. Interruptor general ANELO_CARGA_HABILITADA (apagado por defecto).    ║
- * ║    3. Modo prueba: sólo clientes de prueba (9999xx) mientras esté activo.  ║
- * ║    4. Cada registro se valida acá de nuevo antes de salir a la red.        ║
+ * ║    3. Cada registro se valida acá de nuevo antes de salir a la red.        ║
  * ║  La confirmación de la persona por WhatsApp la exige la capa del bot.      ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
@@ -44,9 +43,6 @@ export interface AneloClientOptions {
   servidor: string;
   timeoutMs: number;
   cargaHabilitada: boolean;
-  modoPrueba: boolean;
-  /** Prefijo de los códigos de cliente de prueba (ej. "9999"). */
-  prefijoPrueba: string;
   logger: Logger;
   fetchImpl?: typeof fetch;
 }
@@ -178,14 +174,6 @@ export class AneloClient {
       throw new SeaWhiteError("La carga en SEA WHITE está deshabilitada (ANELO_CARGA_HABILITADA=false).");
     }
     if (registros.length === 0) throw new SeaWhiteError("No hay registros para cargar.");
-    if (this.opts.modoPrueba) {
-      const ajenos = registros.filter((r) => !r.cliente.startsWith(this.opts.prefijoPrueba));
-      if (ajenos.length > 0) {
-        throw new SeaWhiteError(
-          `Modo prueba activo: sólo se puede cargar en clientes de prueba (${this.opts.prefijoPrueba}xx); se intentó ${[...new Set(ajenos.map((r) => r.cliente))].join(", ")}.`,
-        );
-      }
-    }
   }
 
   private validarRegistro(tipo: TipoRegistro, r: RegistroCarga): RegistroCarga {

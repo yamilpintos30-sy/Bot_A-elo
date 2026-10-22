@@ -54,8 +54,6 @@ async function main(): Promise<void> {
     servidor: config.SEALINK_SERVIDOR,
     timeoutMs: config.SEALINK_TIMEOUT_MS,
     cargaHabilitada: false, // SÓLO LECTURA, siempre.
-    modoPrueba: true,
-    prefijoPrueba: "9999",
     logger,
   });
 

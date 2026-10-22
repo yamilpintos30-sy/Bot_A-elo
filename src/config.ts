@@ -66,14 +66,6 @@ export const seawhiteSchema = z.object({
    * ningún POST sale a la red.
    */
   ANELO_CARGA_HABILITADA: booleanFromEnv.default(false),
-  /**
-   * Modo prueba: con true, la carga SOLO acepta clientes de prueba, cuyo
-   * código empieza con este prefijo (ej. 999991 Total, 999992 Vista). No hay
-   * ambiente de prueba en SEA WHITE: las pruebas quedan en producción bajo
-   * códigos ficticios que nunca se confunden con uno real.
-   */
-  ANELO_MODO_PRUEBA: booleanFromEnv.default(true),
-  ANELO_PREFIJO_PRUEBA: z.string().regex(/^\d{1,6}$/).default("9999"),
 });
 
 export const chatwootSchema = z.object({

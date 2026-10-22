@@ -49,8 +49,6 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     servidor: config.SEALINK_SERVIDOR,
     timeoutMs: config.SEALINK_TIMEOUT_MS,
     cargaHabilitada: config.ANELO_CARGA_HABILITADA,
-    modoPrueba: config.ANELO_MODO_PRUEBA,
-    prefijoPrueba: config.ANELO_PREFIJO_PRUEBA,
     logger,
   });
 

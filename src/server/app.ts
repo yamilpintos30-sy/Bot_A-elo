@@ -19,7 +19,6 @@ export function createApp(c: Pick<Container, "config" | "engine" | "echo" | "log
       service: "seawhite-bot-anelo",
       inbox: c.config.CHATWOOT_INBOX_ID,
       cargaHabilitada: c.config.ANELO_CARGA_HABILITADA,
-      modoPrueba: c.config.ANELO_MODO_PRUEBA,
       time: new Date().toISOString(),
     });
   });

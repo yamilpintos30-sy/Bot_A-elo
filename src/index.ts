@@ -11,7 +11,7 @@ async function main(): Promise<void> {
   process.on("uncaughtException", (err) => logger.error({ err }, "Excepción no capturada; el bot sigue"));
 
   logger.info(
-    { inbox: config.CHATWOOT_INBOX_ID, cargaHabilitada: config.ANELO_CARGA_HABILITADA, modoPrueba: config.ANELO_MODO_PRUEBA, modelo: config.EXTRACTION_MODEL },
+    { inbox: config.CHATWOOT_INBOX_ID, cargaHabilitada: config.ANELO_CARGA_HABILITADA, modelo: config.EXTRACTION_MODEL },
     "Configuración del bot Añelo",
   );
 

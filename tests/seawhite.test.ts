@@ -40,8 +40,6 @@ function client(fetchImpl: typeof fetch, overrides: Partial<ConstructorParameter
     servidor: "1",
     timeoutMs: 5000,
     cargaHabilitada: true,
-    modoPrueba: true,
-    prefijoPrueba: "9999",
     logger,
     fetchImpl,
     ...overrides,
@@ -88,15 +86,9 @@ describe("candados de la carga", () => {
     expect(f.calls).toHaveLength(0);
   });
 
-  it("en modo prueba rechaza un cliente real sin salir a la red", async () => {
-    const f = fakeFetch(() => okCarga([]));
-    await expect(client(f.fn).cargar("chofer", [registro("30123456", { cliente: "000001" })])).rejects.toThrow(/Modo prueba/);
-    expect(f.calls).toHaveLength(0);
-  });
-
-  it("sin modo prueba acepta clientes reales", async () => {
+  it("carga en cualquier cliente de la tabla (sin modo prueba)", async () => {
     const f = fakeFetch(() => okCarga(["30123456"]));
-    const r = await client(f.fn, { modoPrueba: false }).cargar("chofer", [registro("30123456", { cliente: "000001" })]);
+    const r = await client(f.fn).cargar("chofer", [registro("30123456", { cliente: "0005", subcliente: "0000" })]);
     expect(r.correctos).toBe(1);
   });
 
@@ -139,7 +131,7 @@ describe("candados de la carga", () => {
 
   it("chofer: manda la razón social (Razon_Social) y los códigos de 4 dígitos tal cual", async () => {
     const f = fakeFetch(() => okCarga(["30123456"]));
-    await client(f.fn, { modoPrueba: false }).cargar("chofer", [registro("30123456", { cliente: "0001", subcliente: "0000", razonSocial: "JUAN CARLOS PEREZ" })]);
+    await client(f.fn).cargar("chofer", [registro("30123456", { cliente: "0001", subcliente: "0000", razonSocial: "JUAN CARLOS PEREZ" })]);
     const form = f.calls.find((c) => c.method === "POST" && c.url.endsWith("/chofer"))!.body as FormData;
     expect(form.get("Registros[0].Cliente")).toBe("0001");
     expect(form.get("Registros[0].Subcliente")).toBe("0000");
