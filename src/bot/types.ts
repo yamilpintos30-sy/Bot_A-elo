@@ -78,37 +78,32 @@ export interface CarnetConsultado {
   seawhiteId: number | null;
 }
 
-/** Estado del flujo de consultas (choferes). */
+/** Estado del flujo de consultas (choferes). Sesiones viejas pueden traer campos que ya no se usan. */
 export interface ConsultaState {
   saludado: boolean;
   /**
-   * Cliente y subcliente declarados AL PRINCIPIO: toda consulta es para esa
-   * planta (un DNI o una patente pueden estar en varias). [Menú] los borra;
-   * [Consulta] los conserva.
-   */
-  clienteCodigo?: string;
-  plantaCodigo?: string;
-  /** Ya se le pidió la planta (para avisar "no encontré ese cliente" sólo después). */
-  pidioPlanta?: boolean;
-  /** "¿Quisiste decir ...?" pendiente (cliente y subcliente). */
-  sugerencia?: { clienteCodigo: string; plantaCodigo?: string };
-  /**
    * Rama elegida en el menú principal:
-   *   habilitacion -> cliente y subcliente -> por DNI o por dominio
-   *   vehiculo     -> VTV o seguro por patente (sin planta)
+   *   habilitacion -> por DNI o por dominio -> clientes donde está habilitado -> elegir uno
+   *   vehiculo     -> VTV o seguro por patente
    */
   rama?: "habilitacion" | "vehiculo";
   /**
-   * Opción elegida en el menú principal:
-   *   chofer / dominio -> credencial de ingreso (con cliente y subcliente) por DNI o patente
-   *   vtv / seguro     -> comprobante del vehículo por patente (sin cliente)
+   *   chofer / dominio -> habilitación por DNI o por patente
+   *   vtv / seguro     -> comprobante del vehículo por patente
    */
   modo?: "chofer" | "dominio" | "vtv" | "seguro";
+  /** Habilitación: DNI o patente consultado y los clientes donde está habilitado (API 1 / 7). */
+  identificador?: string;
+  habilitados?: Array<{ codigo: string; nombre: string }>;
+  /** Cliente elegido de esa lista, y sus subclientes (API 2 / 8) si hay que elegir uno. */
+  clienteCodigo?: string;
+  clienteNombre?: string;
+  subclientes?: Array<{ codigo: string; nombre: string }>;
+  plantaCodigo?: string;
+  plantaNombre?: string;
   /** VTV/seguro: dominio consultado y si ya se ofreció el otro comprobante. */
   ultimoDominio?: string;
   otroOfrecido?: boolean;
-  /** DNI o patente que mandó ANTES de decir la planta: se consulta apenas la elija. */
-  pendiente?: { tipo: "chofer" | "dominio"; identificador: string };
   /** Carnet de la última consulta (su ID de SEA WHITE se usa para mandar el PDF). */
   ultimos?: CarnetConsultado[];
 }

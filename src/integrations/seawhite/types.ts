@@ -32,6 +32,10 @@ export const consultaResponseSchema = z.object({
   chofer: z.string().optional(),
   dominio: z.string().optional(),
   vencimiento: z.string().optional(),
+  // Nombre del chofer: el documento lo muestra como "razon_Social"; se aceptan las variantes.
+  razon_Social: z.string().nullable().optional(),
+  razon_social: z.string().nullable().optional(),
+  Razon_Social: z.string().nullable().optional(),
   nombreArchivoOriginal: z.string().nullable().optional(),
   fechaAlta: z.string().nullable().optional(),
   fechaModificacion: z.string().nullable().optional(),
@@ -89,8 +93,16 @@ export type Consulta =
       vencimiento: string;
       fechaAlta: string | null;
       fechaModificacion: string | null;
+      /** Nombre y apellido del chofer ("razon_Social"), si la API lo trae. */
+      nombre?: string | null;
     }
   | { found: false; tipo: TipoRegistro; identificador: string; mensaje?: string };
+
+/** Cliente o subcliente tal como lo devuelve la API (código como texto, con sus ceros). */
+export interface CodigoNombre {
+  codigo: string;
+  nombre: string;
+}
 
 /** Respuesta de POST /api/vencimientos/chofer (consulta de documentación, igual que Enri). */
 export const documentacionChoferSchema = z.object({

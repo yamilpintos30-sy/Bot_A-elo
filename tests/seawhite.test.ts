@@ -239,6 +239,57 @@ describe("consultas", () => {
     expect(() => assertAllowedEndpoint("GET", "/api/DocumentosVehiculos/vtv/AF498ZJ.pdf")).toThrow(/BLOQUEADO/);
   });
 
+  it("la consulta trae el nombre del chofer (razon_Social, como en el documento)", async () => {
+    const f = fakeFetch(() =>
+      Response.json({ ok: true, id: 107, cliente: "0001", subcliente: "0000", chofer: "92791217", razon_Social: "Abner Pintos Stoletny", vencimiento: "2026-10-31" }),
+    );
+    const r = await client(f.fn).consultar("chofer", "0001", "0000", "92791217");
+    expect(r).toMatchObject({ found: true, id: 107, nombre: "Abner Pintos Stoletny" });
+  });
+
+  it("API 1 / 7: clientes donde está habilitado un DNI o un dominio (JSON del manual)", async () => {
+    const f = fakeFetch((call) => {
+      const path = new URL(call.url).pathname;
+      if (path === "/api/VencimientosAnelo/clientes/38303667") {
+        return Response.json({ ok: true, dni: "38303667", cantidad: 1, clientes: [{ cliente: "000015", razon_social: "ALFA TRANSPORTES S.A." }] });
+      }
+      if (path === "/api/VencimientosAnelo/clientes-dominio/AAA111") {
+        return Response.json({ ok: true, dominio: "AAA111", cantidad: 0, clientes: [] });
+      }
+      return new Response("no", { status: 500 });
+    });
+    const c = client(f.fn, { cargaHabilitada: false });
+    expect(await c.clientesHabilitados("chofer", "38303667")).toEqual([{ codigo: "000015", nombre: "ALFA TRANSPORTES S.A." }]);
+    expect(await c.clientesHabilitados("dominio", "AAA111")).toEqual([]); // sin coincidencias: 200 con lista vacía
+  });
+
+  it("API 2 / 8: subclientes de un DNI o dominio en un cliente (JSON del manual)", async () => {
+    const f = fakeFetch((call) => {
+      const path = new URL(call.url).pathname;
+      const subclientes = [{ subcliente: "000003", razon_social: "DEPOSITO CENTRAL" }];
+      if (path === "/api/VencimientosAnelo/subclientes/38303667/000015") return Response.json({ ok: true, dni: "38303667", cliente: "000015", cantidad: 1, subclientes });
+      if (path === "/api/VencimientosAnelo/subclientes-dominio/AAA111/000015") return Response.json({ ok: true, dominio: "AAA111", cliente: "000015", cantidad: 1, subclientes });
+      return new Response("no", { status: 500 });
+    });
+    const c = client(f.fn);
+    expect(await c.subclientesHabilitados("chofer", "38303667", "000015")).toEqual([{ codigo: "000003", nombre: "DEPOSITO CENTRAL" }]);
+    expect(await c.subclientesHabilitados("dominio", "AAA111", "000015")).toEqual([{ codigo: "000003", nombre: "DEPOSITO CENTRAL" }]);
+  });
+
+  it("API 1: un error de SEA WHITE no se toma como 'sin habilitaciones'", async () => {
+    const f = fakeFetch(() => Response.json({ ok: false, mensaje: "falla" }, { status: 500 }));
+    await expect(client(f.fn).clientesHabilitados("chofer", "38303667")).rejects.toThrow(/HTTP 500/);
+  });
+
+  it("API 1/2/7/8: sólo GET, y con DNI o patente válidos en la ruta", () => {
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/38303667")).toEqual({ writes: false });
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/subclientes/38303667/000015")).toEqual({ writes: false });
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes-dominio/AA123BB")).toEqual({ writes: false });
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/subclientes-dominio/AA123BB/0001")).toEqual({ writes: false });
+    expect(() => assertAllowedEndpoint("POST", "/api/VencimientosAnelo/clientes/38303667")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/../../x")).toThrow(/BLOQUEADO/);
+  });
+
   it("las consultas funcionan aunque la carga esté deshabilitada", async () => {
     const f = fakeFetch(() => new Response(PDF, { headers: { "Content-Type": "application/pdf" } }));
     const pdf = await client(f.fn, { cargaHabilitada: false }).descargarPdf("dominio", 5);

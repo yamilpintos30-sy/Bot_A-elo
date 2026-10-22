@@ -1,7 +1,7 @@
 /**
  * Flujo de CARGA (números de la lista de cargadores).
  *
- *   ¿Qué cliente?      -> menú con los clientes de la tabla (de a páginas si son más de 10)
+ *   ¿Qué cliente?      -> menú con los clientes de la tabla (varias listas si son más de 10)
  *   ¿Qué operadora?    -> menú con los subclientes de ese cliente
  *   ¿Qué documentación? -> [Choferes] [Dominios]
  *   -> mandar el PDF -> procesar, avisando el progreso (separar carnets, verificar)
@@ -21,6 +21,7 @@ import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
 import type { BotDeps, Emit, LotePendiente } from "./deps.js";
+import { emitirMenu, MAX_OPCIONES, titulos } from "./menuListas.js";
 import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
@@ -37,14 +38,6 @@ function nombreParaBoton(c: Cliente): string {
   if (c.nombre.length <= 10) return c.nombre;
   const alias = c.alias.filter((a) => a.trim().length >= 3).sort((a, b) => a.length - b.length)[0];
   return alias ? nombreCorto(alias) : nombreCorto(c.nombre);
-}
-/** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
-const MAX_OPCIONES = 10;
-
-/** Títulos de botón únicos (si dos nombres se cortan igual, se les antepone el código). */
-function titulos<T extends { codigo: string; nombre: string }>(items: T[], nombre: (i: T) => string): ButtonSpec[] {
-  const base = items.map((i) => buttonTitle(nombre(i)));
-  return items.map((i, n) => ({ title: base.filter((b) => b === base[n]).length > 1 ? buttonTitle(`${i.codigo} ${nombre(i)}`) : base[n]!, payload: "" }));
 }
 const CONFIRMAR: ButtonSpec = { title: "Confirmar carga", payload: "confirmar" };
 const CANCELAR: ButtonSpec = { title: "Cancelar", payload: "cancelar" };
@@ -152,22 +145,11 @@ export class CargadorFlow {
     return this.procesar(session, st, destino, emit);
   }
 
-  /**
-   * Menú de clientes (por orden alfabético). Si entran en una lista (10), uno solo.
-   * Si no, varias listas seguidas de hasta 10, todas válidas a la vez (el motor
-   * acumula los botones de toda la respuesta): sin [Ver más] ni páginas.
-   */
+  /** Menú de clientes (por orden alfabético): botones, una lista o varias (menuListas.ts). */
   private async menuClientes(clientes: Cliente[], emit: Emit, hola: boolean): Promise<void> {
     const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
     if (!opciones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
-    if (opciones.length <= MAX_OPCIONES) return emit({ kind: "buttons", text: CARGA.elegirCliente(hola, opciones.length > 3), buttons: opciones });
-
-    const tandas: ButtonSpec[][] = [];
-    for (let i = 0; i < opciones.length; i += MAX_OPCIONES) tandas.push(opciones.slice(i, i + MAX_OPCIONES));
-    for (const [i, tanda] of tandas.entries()) {
-      const rango = CARGA.listaClientes(i + 1, tandas.length, tanda[0]!.title, tanda.at(-1)!.title);
-      await emit({ kind: "buttons", text: i === 0 ? `${CARGA.elegirClienteVarias(hola, tandas.length)}\n\n${rango}` : rango, buttons: tanda });
-    }
+    return emitirMenu(emit, opciones, { una: (lista) => CARGA.elegirCliente(hola, lista), varias: (listas) => CARGA.elegirClienteVarias(hola, listas) });
   }
 
   /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */

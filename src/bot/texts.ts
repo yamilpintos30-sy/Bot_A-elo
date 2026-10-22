@@ -7,6 +7,7 @@
 import type { CarnetListo, CarnetRechazado } from "../extraction/review.js";
 import type { ResumenCarga } from "../integrations/seawhite/types.js";
 import { diffDays, parseCalendarDate, type CalendarDate } from "../utils/dates.js";
+import { aclaracionLista, variasListas } from "./menuListas.js";
 
 // --- Formato de fechas -----------------------------------------------------------
 
@@ -77,29 +78,15 @@ export const TIPO = {
 const deTipo = (tipo: "chofer" | "dominio", listado: boolean) => (listado ? TIPO[tipo].registros : TIPO[tipo].carnets);
 const unidad = (n: number, listado: boolean) => `${listado ? "registro" : "carnet"}${n === 1 ? "" : "s"}`;
 
-/** Cliente y subcliente (carga y consulta): solo texto, sin listas de opciones. */
-export const DESTINO = {
-  elegirPlanta: (cliente: string) => `¿Qué *subcliente* de *${cliente}*?`,
-  clienteNoEncontrado: "❌ No se encontró ese *cliente y subcliente*. Escribilos de nuevo.",
-  /** Coincidencia exacta: igual se confirma con [Sí] [No]. */
-  confirmar: (destino: string) => `🔎 Encontré *${destino}*. ¿Es correcto?`,
-  plantaNoEncontrada: (cliente: string) => `❌ No encontré ese subcliente en *${cliente}*. Escribilo de nuevo.`,
-  quisisteDecir: (destino: string) => `🤔 ¿Quisiste decir *${destino}*?\nSi no, escribí el *cliente y subcliente* correctos.`,
-  reescribir: "Dale, escribí el *cliente y subcliente* correctos.",
-};
-
 export const CARGA = {
   /** Paso 1: cliente (menú, de la tabla de clientes). */
   /**
    * `lista`: con más de 3 opciones WhatsApp muestra un botón "Choose an item" (texto
    * fijo de Chatwoot, no se puede cambiar): se aclara que hay que tocarlo.
    */
-  elegirCliente: (hola: boolean, lista = false) =>
-    `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?${lista ? "\n👇 Tocá el botón de abajo para ver la lista." : ""}`,
+  elegirCliente: (hola: boolean, lista = false) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?${lista ? `\n${aclaracionLista}` : ""}`,
   /** Muchos clientes: van en varias listas seguidas, por orden alfabético. */
-  elegirClienteVarias: (hola: boolean, listas: number) =>
-    `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?\n👇 Están en ${listas} listas por orden alfabético: tocá el botón de la que corresponda.`,
-  listaClientes: (n: number, total: number, desde: string, hasta: string) => `📋 Lista ${n} de ${total}: *${desde}* a *${hasta}*`,
+  elegirClienteVarias: (hola: boolean, listas: number) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?\n${variasListas(listas)}`,
   /** Paso 2: operadora (subcliente) del cliente elegido. */
   elegirOperadora: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
   /** Después de elegir el cliente: se confirma antes de pasar a la operadora. */
@@ -214,19 +201,27 @@ export const CONSULTA = {
   /** Mismo saludo que Enri (con el nombre si se identificó el teléfono). */
   saludo: (bot: string, nombre?: string | null) =>
     nombre ? `¡Hola, ${nombre}! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*` : `¡Hola! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*`,
-  pedirClienteSubcliente: "Escribí *cliente y subcliente* para la consulta.",
   /** Menú principal: dos ramas. */
   menuPrincipal: [
     "¿Qué querés consultar?",
-    "🪪 *Habilitación*: credencial de ingreso y vencimiento en un cliente y subcliente, por DNI o por dominio.",
+    "🪪 *Habilitación*: en qué clientes podés entrar y hasta cuándo, por DNI o por dominio.",
     "📄 *VTV y seguro*: te mando el comprobante del vehículo.",
   ].join("\n"),
-  /** Rama habilitación, con el cliente y subcliente elegidos. */
-  menuHabilitacion: (destino: string) => `✅ *${destino}*.\n¿Consultás por *DNI* (chofer) o por *dominio* (vehículo)?`,
+  /** Rama habilitación. */
+  menuHabilitacion: "¿Consultás por *DNI* (chofer) o por *dominio* (vehículo)?",
   /** Rama VTV y seguro. */
   menuVehiculo: "¿Qué comprobante necesitás?",
-  pedirDniPara: (destino: string) => `✅ *${destino}*.\n👤 Pasame el *DNI* del chofer (solo números, sin puntos).`,
-  pedirPatentePara: (destino: string) => `✅ *${destino}*.\n🚛 Pasame la *patente* (dominio) del vehículo. Ejemplo: AA123BB`,
+  pedirDni: "👤 Pasame el *DNI* del chofer (solo números, sin puntos).",
+  pedirPatente: "🚛 Pasame la *patente* (dominio) del vehículo. Ejemplo: AA123BB",
+  buscandoHabilitaciones: (tipo: "chofer" | "dominio", id: string) => `🔎 Buscando dónde está habilitado ${tipo === "chofer" ? "el DNI" : "el dominio"} *${id}*…`,
+  /** La API 1 / 7 no devolvió ningún cliente (sólo informa habilitaciones VIGENTES). */
+  sinHabilitaciones: (tipo: "chofer" | "dominio", id: string) =>
+    `❌ No encontré habilitaciones vigentes para ${tipo === "chofer" ? "el DNI" : "el dominio"} *${id}*.\nRevisá ${tipo === "chofer" ? "el número" : "la patente"} y escribil${tipo === "chofer" ? "o" : "a"} de nuevo.`,
+  /** Clientes donde está habilitado: se elige uno (botones, lista o varias listas). */
+  elegirClienteHabilitado: (tipo: "chofer" | "dominio", id: string, cantidad: number) =>
+    `${tipo === "chofer" ? "👤 DNI" : "🚛 Dominio"} *${id}*: habilitado en *${cantidad}* cliente${cantidad === 1 ? "" : "s"}.\n¿Cuál querés ver?`,
+  elegirOperadoraHabilitada: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
+  consultaNoDisponible: "No pude consultar las habilitaciones en este momento. Probá de nuevo en unos minutos.",
   pedirPatenteDoc: (doc: "vtv" | "seguro") => `🚛 Pasame la *patente* (dominio) del vehículo y te mando ${doc === "vtv" ? "la *VTV*" : "el *seguro*"}. Ejemplo: AA123BB`,
   docCaption: (doc: "vtv" | "seguro", dominio: string) => `${doc === "vtv" ? "📄 VTV" : "🛡️ Seguro"} – ${dominio}`,
   docNoEncontrado: (doc: "vtv" | "seguro", dominio: string) => `❌ No encontré ${doc === "vtv" ? "la VTV" : "el seguro"} del dominio *${dominio}*.`,
@@ -242,7 +237,7 @@ export const CONSULTA = {
   sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas de vencimientos.",
   preguntaCarnet: "¿Querés que te pase el carnet?",
   /** Momento oportuno para aclarar cómo seguir. */
-  algoMas: "¿Necesitás algo más?\nPara otro DNI o dominio en este cliente y subcliente, tocá *Consulta*; para volver al inicio, *Menú*.",
+  algoMas: "¿Necesitás algo más?\nPara otro DNI o dominio, tocá *Consulta*; para volver al inicio, *Menú*.",
   algoMasVehiculo: "¿Necesitás algo más?\nPara otra patente o para consultar la habilitación, tocá *Menú*.",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
 };

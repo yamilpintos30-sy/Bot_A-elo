@@ -40,6 +40,12 @@ export const SEAWHITE_ALLOWED_ENDPOINTS: readonly AllowedEndpoint[] = [
   { method: "GET", path: "/api/VencimientosAnelo/dominio", writes: false, description: "consulta de dominio" },
   { method: "GET", path: /^\/api\/VencimientosAnelo\/chofer\/\d+\/\d+\/pdf$/, writes: false, description: "PDF de chofer" },
   { method: "GET", path: /^\/api\/VencimientosAnelo\/dominio\/\d+\/\d+\/pdf$/, writes: false, description: "PDF de dominio" },
+  // "Manual_BOT_Endpoints_Vencimientos_Anelo_Con_JSON.pdf" (sólo lectura): en qué clientes
+  // y subclientes tiene habilitación vigente un DNI (1 y 2) o un dominio (7 y 8).
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes\/\d{7,8}$/, writes: false, description: "clientes de un DNI (API 1)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes\/\d{7,8}\/\d{1,10}$/, writes: false, description: "subclientes de un DNI y cliente (API 2)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes-dominio\/[A-Z0-9]{6,8}$/, writes: false, description: "clientes de un dominio (API 7)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-dominio\/[A-Z0-9]{6,8}\/\d{1,10}$/, writes: false, description: "subclientes de un dominio y cliente (API 8)" },
   // EXCEPCIÓN AUTORIZADA (2026-10-13): carga de vencimientos.
   { method: "POST", path: "/api/VencimientosAnelo/chofer", writes: true, description: "CARGA de vencimientos de chofer" },
   { method: "POST", path: "/api/VencimientosAnelo/dominio", writes: true, description: "CARGA de vencimientos de dominio" },

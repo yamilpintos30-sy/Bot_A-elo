@@ -26,6 +26,7 @@ import {
   documentacionCamionSchema,
   documentacionChoferSchema,
   SeaWhiteError,
+  type CodigoNombre,
   type Consulta,
   type Documentacion,
   type RegistroCarga,
@@ -82,7 +83,43 @@ export class AneloClient {
       vencimiento: d.vencimiento!,
       fechaAlta: d.fechaAlta ?? null,
       fechaModificacion: d.fechaModificacion ?? null,
+      nombre: (d.razon_Social ?? d.razon_social ?? d.Razon_Social ?? "").trim() || null,
     };
+  }
+
+  /** Clientes donde el DNI (API 1) o el dominio (API 7) tiene habilitación vigente. */
+  async clientesHabilitados(tipo: TipoRegistro, identificador: string): Promise<CodigoNombre[]> {
+    const id = encodeURIComponent(identificador);
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/clientes/${id}` : `/api/VencimientosAnelo/clientes-dominio/${id}`;
+    return this.listaCodigos(path, "clientes", "cliente");
+  }
+
+  /** Subclientes vigentes del DNI (API 2) o del dominio (API 8) en un cliente. */
+  async subclientesHabilitados(tipo: TipoRegistro, identificador: string, cliente: string): Promise<CodigoNombre[]> {
+    const id = encodeURIComponent(identificador);
+    const cli = encodeURIComponent(cliente);
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/subclientes/${id}/${cli}` : `/api/VencimientosAnelo/subclientes-dominio/${id}/${cli}`;
+    return this.listaCodigos(path, "subclientes", "subcliente");
+  }
+
+  /**
+   * Listas del manual: { ok, cantidad, <lista>: [{ <campo>: "000015", razon_social: "..." }] }.
+   * Sin coincidencias la API responde 200 con la lista vacía. Los códigos quedan como
+   * texto, con sus ceros a la izquierda.
+   */
+  private async listaCodigos(path: string, lista: string, campo: string): Promise<CodigoNombre[]> {
+    const res = await this.request("GET", path);
+    if (res.status === 404) return [];
+    if (!res.ok) throw new SeaWhiteError(`SEA WHITE respondió HTTP ${res.status} a ${path}`, res.status);
+    const body = (await this.safeJson(res)) as Record<string, unknown>;
+    const items = body[lista];
+    if (body.ok === false || !Array.isArray(items)) throw new SeaWhiteError(`Respuesta inesperada de SEA WHITE en ${path}`);
+    return items
+      .map((i: Record<string, unknown>) => ({
+        codigo: String(i[campo] ?? "").trim(),
+        nombre: String(i.razon_social ?? i.razon_Social ?? i.Razon_Social ?? "").trim(),
+      }))
+      .filter((c) => c.codigo !== "");
   }
 
   /**

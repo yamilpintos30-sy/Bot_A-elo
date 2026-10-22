@@ -3,7 +3,7 @@
  * con dobles (sin Claude, sin SEA WHITE, sin Chatwoot, sin Supabase).
  */
 import type { OnEtapa, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
-import type { Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
+import type { CodigoNombre, Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { ResultadoVerificacion } from "../extraction/verificadorComprobantes.js";
 import type { ListaTelefonos } from "../storage/cargadores.js";
 import type { FallasRepo } from "../storage/fallas.js";
@@ -16,6 +16,10 @@ import type { Outbound } from "./types.js";
 /** Lo que el bot usa de la API de SEA WHITE (AneloClient lo implementa). */
 export interface SeaWhiteService {
   consultar(tipo: TipoRegistro, cliente: string, subcliente: string, identificador: string): Promise<Consulta>;
+  /** Clientes donde ese DNI o dominio tiene habilitación VIGENTE (APIs 1 y 7 del manual). */
+  clientesHabilitados(tipo: TipoRegistro, identificador: string): Promise<CodigoNombre[]>;
+  /** Subclientes (operadoras) vigentes de ese DNI o dominio en un cliente (APIs 2 y 8). */
+  subclientesHabilitados(tipo: TipoRegistro, identificador: string, cliente: string): Promise<CodigoNombre[]>;
   documentacion(tipo: TipoRegistro, identificador: string): Promise<Documentacion>;
   descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer>;
   /** Razón social del chofer por su teléfono (para el saludo); null si no está. */
