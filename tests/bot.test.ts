@@ -220,7 +220,7 @@ describe("reconocimiento de cliente y planta", () => {
 
 /** Carga: [Menú] -> cliente -> operadora -> tipo (todo por menús). Queda esperando el PDF. */
 async function elegirCarga(say: Awaited<ReturnType<typeof setup>>["say"], tipo: string, cliente = "Total Austral", operadora = "Planta 1") {
-  await say(CARGADOR, "Menú 😊");
+  await say(CARGADOR, "🏠 Menú principal");
   await say(CARGADOR, cliente);
   await say(CARGADOR, "✅ Sí"); // "Elegiste X. ¿Es correcto?"
   await say(CARGADOR, operadora);
@@ -379,7 +379,7 @@ describe("cargador", () => {
     outs = await say(CARGADOR, "✅ Sí");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
     // Escribir otra cosa en vez de contestar repite la pregunta.
-    await say(CARGADOR, "Menú 😊");
+    await say(CARGADOR, "🏠 Menú principal");
     await say(CARGADOR, "Vista Energy");
     outs = await say(CARGADOR, "eh?");
     expect(texts(outs)).toBe("Elegiste *VISTA ENERGY*. ¿Es correcto?");
@@ -510,7 +510,7 @@ describe("cargador", () => {
     expect(seawhite.cargas.map((c) => [c.tipo, c.registros.map((r) => r.identificador)])).toEqual([["chofer", ["33615617"]]]);
     // Botón para cargar los vehículos del MISMO documento (sin reprocesar).
     expect(texts(outs)).toMatch(/también tiene 1 carnets de vehículos/);
-    expect(buttons(outs)).toEqual(["🚛 Cargar dominios", "Menú 😊", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["🚛 Cargar dominios", "🏠 Menú principal", "Eso es todo, gracias"]);
     // Resultado y pregunta en UN mensaje (separados, WhatsApp los desordenaba).
     const ultimo = outs.at(-1) as Extract<Outbound, { kind: "buttons" }>;
     expect(ultimo.text).toMatch(/Carga completada[\s\S]*también tiene 1 carnets de vehículos/);
@@ -581,7 +581,7 @@ describe("cargador", () => {
     await elegirCarga(say, "🚛 Dominios");
     await say(CARGADOR, "", [pdfAdj()]);
     await say(CARGADOR, "Confirmar carga");
-    const outs = await say(CARGADOR, "Menú 😊");
+    const outs = await say(CARGADOR, "🏠 Menú principal");
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
     expect(seawhite.cargas.map((c) => c.tipo)).toEqual(["dominio"]);
   });
@@ -756,9 +756,9 @@ describe("cargador", () => {
 
 describe("chofer", () => {
   const MENU = ["🪪 Habilitación", "📄 VTV y seguro", "Eso es todo, gracias"];
-  const MENU_HAB = ["🪪 Por DNI", "🚛 Por dominio", "Menú 😊"];
-  const MENU_VEH = ["📄 VTV", "🛡️ Seguro", "Menú 😊"];
-  const FIN_CONSULTA = ["Menú 😊", "🔎 Consulta", "Eso es todo, gracias"];
+  const MENU_HAB = ["🪪 Por DNI", "🚛 Por dominio", "🏠 Menú principal"];
+  const MENU_VEH = ["📄 VTV", "🛡️ Seguro", "🏠 Menú principal"];
+  const FIN_CONSULTA = ["🏠 Menú principal", "🔎 Otra habilitación", "Eso es todo, gracias"];
   const CARNET = ["📄 Sí, pasámelo", "No, gracias"];
 
   /** Saludo -> Habilitación -> la opción elegida. */
@@ -820,7 +820,7 @@ describe("chofer", () => {
     expect((outs[iFile] as Extract<Outbound, { kind: "file" }>).data.toString()).toContain("33615617"); // SU carnet
     const iAlgoMas = outs.findIndex((o) => o.kind === "buttons" && /Necesitás algo más/.test(o.text));
     expect(iAlgoMas).toBeGreaterThan(iFile); // el carnet primero
-    expect(texts(outs)).toMatch(/Para otro DNI o dominio, tocá \*Consulta\*; para volver al inicio, \*Menú\*/);
+    expect(texts(outs)).toMatch(/🔎 \*Otra habilitación\*: otro DNI o dominio\.\n🏠 \*Menú principal\*: elegir entre Habilitación y VTV y seguro\./);
     expect(buttons(outs)).toEqual(FIN_CONSULTA);
   });
 
@@ -850,7 +850,7 @@ describe("chofer", () => {
     // El carnet es el de ESA operadora; después sigue ofreciendo otro cliente.
     outs = await say(CHOFER, "📄 Sí, pasámelo");
     expect(outs.find((o) => o.kind === "file")).toMatchObject({ caption: "📄 Carnet – TOTAL AUSTRAL – Planta 2" });
-    expect(buttons(outs)).toEqual(["Menú 😊", "🔎 Consulta", "🏢 Otro cliente"]);
+    expect(buttons(outs)).toEqual(["🏠 Menú principal", "🔎 Otra habilitación", "🏢 Otro cliente"]);
   });
 
   it("el cliente también se puede escribir en vez de tocarlo (si coincide con uno solo)", async () => {
@@ -906,9 +906,9 @@ describe("chofer", () => {
     await say(CHOFER, "Total Austral");
     let outs = await say(CHOFER, "No, gracias");
     expect(buttons(outs)).toEqual(FIN_CONSULTA);
-    outs = await say(CHOFER, "🔎 Consulta");
+    outs = await say(CHOFER, "🔎 Otra habilitación");
     expect(buttons(outs)).toEqual(MENU_HAB);
-    outs = await say(CHOFER, "Menú 😊");
+    outs = await say(CHOFER, "🏠 Menú principal");
     expect(buttons(outs)).toEqual(MENU);
   });
 
@@ -975,12 +975,12 @@ describe("chofer", () => {
     expect(file).toMatchObject({ filename: "VTV_AF498ZJ.pdf", caption: "📄 VTV – AF498ZJ" });
     expect(file.data.toString()).toContain("VTV AF498ZJ");
     expect(texts(outs)).toMatch(/Querés también el \*seguro\* de \*AF498ZJ\*/);
-    expect(buttons(outs)).toEqual(["🛡️ Sí, el seguro", "Menú 😊", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["🛡️ Sí, el seguro", "🏠 Menú principal", "Eso es todo, gracias"]);
 
     outs = await say(CHOFER, "🛡️ Sí, el seguro");
     expect(outs.find((o) => o.kind === "file")).toMatchObject({ filename: "SEGURO_AF498ZJ.pdf" });
-    expect(texts(outs)).toMatch(/Para otra patente o para consultar la habilitación, tocá \*Menú\*/);
-    expect(buttons(outs)).toEqual(["Menú 😊", "Eso es todo, gracias"]);
+    expect(texts(outs)).toMatch(/🏠 \*Menú principal\*: otra patente, o consultar una habilitación\./);
+    expect(buttons(outs)).toEqual(["🏠 Menú principal", "Eso es todo, gracias"]);
   });
 
   it("NO ENCONTRADO: no ofrece el otro comprobante; pide revisar la patente y sigue esperando otra", async () => {
@@ -1037,7 +1037,7 @@ describe("pie y cierre (como Enri)", () => {
     await enDniPie(say);
     const outs = await say(CHOFER, "🪪 Por DNI");
     expect(outs).toHaveLength(1);
-    expect(outs[0]).toMatchObject({ kind: "buttons", text: expect.stringMatching(/Pasame el \*DNI\*/), buttons: [{ title: "Menú 😊" }, { title: "Eso es todo, gracias" }] });
+    expect(outs[0]).toMatchObject({ kind: "buttons", text: expect.stringMatching(/Pasame el \*DNI\*/), buttons: [{ title: "🏠 Menú principal" }, { title: "Eso es todo, gracias" }] });
   });
 
   it("'Eso es todo, gracias' despide, cierra y la próxima vez arranca de cero", async () => {
@@ -1071,7 +1071,7 @@ describe("pie y cierre (como Enri)", () => {
   it("el cargador vuelve a elegir el cliente con [Menú 😊]", async () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
-    const outs = await say(CARGADOR, "Menú 😊");
+    const outs = await say(CARGADOR, "🏠 Menú principal");
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
   });
 });

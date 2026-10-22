@@ -82,7 +82,7 @@ export class CargadorFlow {
 
     const clientes = await this.deps.catalogo.listar();
 
-    // [Menú 😊] / [🔄 Otro cliente]: de cero, desde el cliente.
+    // [🏠 Menú principal] / [🔄 Otro cliente]: de cero, desde el cliente.
     if (payload === "menu" || payload === "otrocliente") {
       session.cargador = { etapa: "esperando_datos" };
       return this.menuClientes(clientes, emit, false);

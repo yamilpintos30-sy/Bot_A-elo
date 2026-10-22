@@ -237,8 +237,8 @@ export const CONSULTA = {
   sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas de vencimientos.",
   preguntaCarnet: "¿Querés que te pase el carnet?",
   /** Momento oportuno para aclarar cómo seguir. */
-  algoMas: "¿Necesitás algo más?\nPara otro DNI o dominio, tocá *Consulta*; para volver al inicio, *Menú*.",
-  algoMasVehiculo: "¿Necesitás algo más?\nPara otra patente o para consultar la habilitación, tocá *Menú*.",
+  algoMas: "¿Necesitás algo más?\n🔎 *Otra habilitación*: otro DNI o dominio.\n🏠 *Menú principal*: elegir entre Habilitación y VTV y seguro.",
+  algoMasVehiculo: "¿Necesitás algo más?\n🏠 *Menú principal*: otra patente, o consultar una habilitación.",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
 };
 

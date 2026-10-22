@@ -6,7 +6,7 @@
  *     en ninguna no se le responde. Un .txt nuevo rige desde el mensaje siguiente.
  *   - Los botones de WhatsApp vuelven como texto con su TÍTULO: se traducen a
  *     su payload con los botones de la última respuesta (todos sus mensajes).
- *   - Como en Enri: toda respuesta cierra con [Menú 😊] [Eso es todo, gracias];
+ *   - Como en Enri: toda respuesta cierra con [🏠 Menú principal] [Eso es todo, gracias];
  *     "Eso es todo" despide y cierra; un "gracias" suelto después del cierre no
  *     reabre la conversación.
  *   - Si una persona tomó la conversación (handoff), el bot no responde.
@@ -146,7 +146,7 @@ export class BotEngine {
 
   /**
    * Salida con botones de pie: el último texto de la respuesta se manda junto
-   * con [Menú 😊] [Eso es todo, gracias], en el mismo mensaje.
+   * con [🏠 Menú principal] [Eso es todo, gracias], en el mismo mensaje.
    */
   private salida(conversationId: string, session: Session) {
     let retenido: Extract<Outbound, { kind: "text" }> | null = null;

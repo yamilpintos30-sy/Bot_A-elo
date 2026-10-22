@@ -1,6 +1,6 @@
 /**
  * Botones de pie y comandos globales, igual que en Enri:
- *   - Toda respuesta cierra con [Menú 😊] [Eso es todo, gracias].
+ *   - Toda respuesta cierra con [🏠 Menú principal] [Eso es todo, gracias].
  *   - "Eso es todo, gracias" (tocado o escrito) despide y cierra la conversación.
  *   - "menú" vuelve al menú del rol.
  *   - Un "gracias"/"ok" suelto después del cierre NO reabre la conversación.
@@ -8,7 +8,7 @@
 import { normalizeText } from "../utils/text.js";
 import type { ButtonSpec } from "./types.js";
 
-export const BOTON_MENU: ButtonSpec = { title: "Menú 😊", payload: "menu" };
+export const BOTON_MENU: ButtonSpec = { title: "🏠 Menú principal", payload: "menu" };
 export const BOTON_FIN: ButtonSpec = { title: "Eso es todo, gracias", payload: "fin" };
 export const PIE: ButtonSpec[] = [BOTON_MENU, BOTON_FIN];
 

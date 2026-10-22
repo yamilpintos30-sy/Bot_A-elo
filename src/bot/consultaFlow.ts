@@ -8,7 +8,7 @@
  *        -> clientes donde está habilitado (API 1 / 7 de SEA WHITE) -> elige uno
  *        -> su operadora (API 2 / 8): si hay una sola, directo; si no, se elige
  *        -> habilitación y vencimiento -> ¿carnet? -> PDF
- *        al terminar: [Menú 😊] vuelve al inicio, [🔎 Consulta] otro DNI o dominio,
+ *        al terminar: [🏠 Menú principal] vuelve al inicio, [🔎 Otra habilitación] otro DNI o dominio,
  *        [Eso es todo]. Con varios clientes, también [🏢 Otro cliente].
  *
  *   📄 VTV y seguro -> [VTV] [Seguro] [Menú] -> patente -> PDF -> ¿el otro también?
@@ -40,7 +40,7 @@ const MENU_PRINCIPAL: ButtonSpec[] = [
 ];
 const MENU_HABILITACION: ButtonSpec[] = [{ title: "🪪 Por DNI", payload: "m:chofer" }, { title: "🚛 Por dominio", payload: "m:dominio" }, BOTON_MENU];
 const MENU_VEHICULO: ButtonSpec[] = [{ title: "📄 VTV", payload: "m:vtv" }, { title: "🛡️ Seguro", payload: "m:seguro" }, BOTON_MENU];
-const BOTON_CONSULTA: ButtonSpec = { title: "🔎 Consulta", payload: "consulta" };
+const BOTON_CONSULTA: ButtonSpec = { title: "🔎 Otra habilitación", payload: "consulta" };
 const BOTON_OTRO_CLIENTE: ButtonSpec = { title: "🏢 Otro cliente", payload: "otrocli" };
 /** Cierre de una consulta de habilitación: inicio, otro DNI/dominio, o terminar. */
 const FIN_CONSULTA: ButtonSpec[] = [BOTON_MENU, BOTON_CONSULTA, BOTON_FIN];

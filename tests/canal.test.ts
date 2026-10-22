@@ -25,7 +25,7 @@ describe("canal de Chatwoot", () => {
     const canal = new ChatwootChannel(client, pino({ level: "silent" }));
 
     await canal.send("c1", { kind: "file", filename: "33615617.pdf", data: Buffer.from("%PDF-"), caption: "Carnet" });
-    await canal.send("c1", { kind: "buttons", text: "¿Necesitás algo más?", buttons: [{ title: "Menú 😊", payload: "menu" }] });
+    await canal.send("c1", { kind: "buttons", text: "¿Necesitás algo más?", buttons: [{ title: "🏠 Menú principal", payload: "menu" }] });
 
     expect(orden).toEqual(["pdf enviado", "esperando entrega 55", "¿algo más?"]);
   });
