@@ -215,6 +215,8 @@ async function elegirCarga(say: Awaited<ReturnType<typeof setup>>["say"], tipo: 
 }
 
 /** Carga completa por el flujo del cargador (para preparar datos de los tests de consulta). */
+const MENU_POST_CARGA = ["Choferes (Total)", "Dominios (Total)", "🔄 Cambiar cliente"];
+
 async function cargar(say: Awaited<ReturnType<typeof setup>>["say"], tipo: "👤 Choferes" | "🚛 Dominios", cliente = "Total Austral", operadora = "Planta 1") {
   await elegirCarga(say, tipo, cliente, operadora);
   await say(CARGADOR, "", [pdfAdj()]);
@@ -263,7 +265,7 @@ describe("cargador", () => {
     expect(texts(outs)).toMatch(/Guardando 2 carnets en el sistema/);
     expect(texts(outs)).toMatch(/Carga completada.*2 cargados \(2 nuevos\)/s);
     // Otra carga del mismo cliente y operadora, o terminar.
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Cambiar cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(MENU_POST_CARGA);
     expect(registro.carnets.map((c) => [c.identificador, c.seawhiteId])).toEqual([
       ["33615617", 1],
       ["29642599", 2],
@@ -506,7 +508,7 @@ describe("cargador", () => {
     await say(CARGADOR, "", [pdfAdj()]);
     const outs = await say(CARGADOR, "Cancelar");
     expect(texts(outs)).toMatch(/cancelada/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Cambiar cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(MENU_POST_CARGA);
     expect(seawhite.cargas).toHaveLength(0);
   });
 
@@ -600,7 +602,7 @@ describe("cargador", () => {
     expect(t).toMatch(/La carga falló.*0 cargados.*❌ 2 con error: SEA WHITE no responde/s);
     expect(t.match(/SEA WHITE no responde/g)).toHaveLength(1); // una sola vez, no por cada registro
     expect(t).not.toMatch(/también tiene/); // no ofrece los vehículos: fallarían por lo mismo
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Cambiar cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(MENU_POST_CARGA);
   });
 
   it("el MISMO archivo de nuevo mientras espera el Confirmar se ignora (sin mensaje)", async () => {
@@ -649,7 +651,7 @@ describe("cargador", () => {
     await elegirCarga(say, "👤 Choferes");
     const outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/ningún carnet apto.*Carnet ilegible/s);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Cambiar cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(MENU_POST_CARGA);
   });
 
   it("si falla el procesamiento lo informa y vuelve al menú", async () => {
@@ -657,7 +659,7 @@ describe("cargador", () => {
     await elegirCarga(say, "👤 Choferes");
     const outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/No pude procesar el PDF: timeout de Claude/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Cambiar cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(MENU_POST_CARGA);
   });
 
   it("los cargadores no consultan: un DNI les abre el menú de carga", async () => {

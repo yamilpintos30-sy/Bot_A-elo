@@ -25,12 +25,19 @@ import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaC
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
 const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
-/** Después de una carga: más del mismo cliente y operadora, cambiar de cliente, o terminar. */
 const CAMBIAR_CLIENTE: ButtonSpec = { title: "🔄 Cambiar cliente", payload: "otrocliente" };
 /** "Elegiste X. ¿Es correcto?" después de elegir el cliente. */
 const CLIENTE_SI: ButtonSpec = { title: "✅ Sí", payload: "clisi" };
 const CLIENTE_NO: ButtonSpec = { title: "✏️ No", payload: "clino" };
-const MENU_OTRA: ButtonSpec[] = [MENU_TIPO[0]!, MENU_TIPO[1]!, CAMBIAR_CLIENTE, BOTON_FIN];
+/**
+ * Nombre del cliente para un botón (tope de 20 caracteres): tal cual si es corto
+ * ("A.C.A", "TEKUN SA"); si no, su alias más corto ("Ducos", "Halliburton").
+ */
+function nombreParaBoton(c: Cliente): string {
+  if (c.nombre.length <= 10) return c.nombre;
+  const alias = c.alias.filter((a) => a.trim().length >= 3).sort((a, b) => a.length - b.length)[0];
+  return alias ? nombreCorto(alias) : nombreCorto(c.nombre);
+}
 /** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
 const MAX_OPCIONES = 10;
 const POR_PAGINA = 8;
@@ -188,16 +195,16 @@ export class CargadorFlow {
       descargados = await Promise.all(archivos.map(async (a) => ({ nombre: a.fileName, bytes: await this.deps.descargarAdjunto(a.url) })));
     } catch (err) {
       this.deps.logger.error({ err }, "No se pudo descargar el archivo del cargador");
-      return this.conMenu(emit, CARGA.noDescarga);
+      return this.conMenu(emit, CARGA.noDescarga, clienteCodigo);
     }
     // Lo que no es PDF (fotos de carnets) se convierte a PDF; varias fotos van en un solo PDF.
     let pdf: Buffer;
     try {
       pdf = await unirEnPdf(descargados);
     } catch (err) {
-      if (err instanceof FormatoNoSoportadoError) return this.conMenu(emit, CARGA.formatoNoSoportado(err.archivo));
+      if (err instanceof FormatoNoSoportadoError) return this.conMenu(emit, CARGA.formatoNoSoportado(err.archivo), clienteCodigo);
       this.deps.logger.error({ err }, "No se pudo armar el PDF con los archivos recibidos");
-      return this.conMenu(emit, CARGA.formatoNoSoportado(nombre));
+      return this.conMenu(emit, CARGA.formatoNoSoportado(nombre), clienteCodigo);
     }
     const nombrePdf = /\.pdf$/i.test(nombre) ? nombre : `${nombre.replace(/\.[a-z]+$/i, "")}.pdf`;
 
@@ -219,7 +226,7 @@ export class CargadorFlow {
       const motivo = err instanceof Error ? err.message : String(err);
       this.deps.logger.error({ err: motivo }, "Falló el procesamiento del PDF");
       await this.deps.registro.terminarCarga(cargaId, { estado: "fallida", total: 0, correctos: 0, errores: 0, costoUsd: null, detalle: { error: motivo } }).catch(() => undefined);
-      return this.conMenu(emit, CARGA.falloProceso(motivo));
+      return this.conMenu(emit, CARGA.falloProceso(motivo), clienteCodigo);
     } finally {
       clearInterval(timer);
     }
@@ -228,7 +235,7 @@ export class CargadorFlow {
       await this.deps.registro
         .terminarCarga(cargaId, { estado: "fallida", total: 0, correctos: 0, errores: resultado.rechazados.length, costoUsd: resultado.costoUsd, detalle: { rechazados: resultado.rechazados, formato: resultado.formato } })
         .catch(() => undefined);
-      return this.conMenu(emit, sinCarnetsAptos(destino, resultado.rechazados, esListado(resultado)));
+      return this.conMenu(emit, sinCarnetsAptos(destino, resultado.rechazados, esListado(resultado)), clienteCodigo);
     }
 
     const lote: LotePendiente = { tipo, cargaId, clienteCodigo, plantaCodigo, destino, archivo: nombre, resultado };
@@ -265,7 +272,7 @@ export class CargadorFlow {
       // Expiró (o el bot se reinició): no se cargó nada y queda registrado así.
       if (!st.ofreciendoOtro) await this.cerrarRegistro(st.cargaId, "sin_confirmar", null);
       session.cargador = { etapa: "esperando_datos", clienteCodigo: st.clienteCodigo, plantaCodigo: st.plantaCodigo };
-      return this.conMenu(emit, CARGA.expirada);
+      return this.conMenu(emit, CARGA.expirada, st.clienteCodigo);
     }
     // Ya se cargó un tipo: se ofrece cargar el otro tipo del mismo documento.
     if (st.ofreciendoOtro) {
@@ -292,7 +299,7 @@ export class CargadorFlow {
       this.deps.lotes.borrar(st.loteId);
       await this.cerrarRegistro(lote.cargaId, "cancelada", lote.resultado.costoUsd);
       session.cargador = { etapa: "esperando_datos", clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo };
-      return this.conMenu(emit, CARGA.cancelada);
+      return this.conMenu(emit, CARGA.cancelada, lote.clienteCodigo);
     }
     if (payload === "cambiar") {
       // Cargarlo como el otro tipo (el que realmente tiene el PDF).
@@ -399,15 +406,25 @@ export class CargadorFlow {
       session.cargador = { etapa: "esperando_confirmacion", tipo: otro, clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo, loteId, ofreciendoOtro: true };
       return this.ofrecerOtro(siguiente, emit, resultadoCarga(lote.destino, resumen));
     }
-    return this.conMenu(emit, resultadoCarga(lote.destino, resumen));
+    return this.conMenu(emit, resultadoCarga(lote.destino, resumen), lote.clienteCodigo);
   }
 
   /**
    * Mensaje final de un paso + el menú para la próxima carga, en UN mensaje:
    * separados, WhatsApp a veces entregaba primero la pregunta y después el resultado.
    */
-  private async conMenu(emit: Emit, texto: string): Promise<void> {
-    return emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: MENU_OTRA });
+  private async conMenu(emit: Emit, texto: string, clienteCodigo?: string): Promise<void> {
+    // [Choferes (cliente)] [Dominios (cliente)] [🔄 Cambiar cliente]: tres botones (con más,
+    // WhatsApp lo muestra como lista). Sin "Eso es todo": la sesión se corta sola a la hora.
+    const cliente = clienteCodigo ? (await this.deps.catalogo.listar()).find((c) => c.codigo === clienteCodigo) : undefined;
+    const botones: ButtonSpec[] = cliente
+      ? [
+          { title: buttonTitle(`Choferes (${nombreParaBoton(cliente)})`), payload: "tipo:chofer" },
+          { title: buttonTitle(`Dominios (${nombreParaBoton(cliente)})`), payload: "tipo:dominio" },
+          CAMBIAR_CLIENTE,
+        ]
+      : [CAMBIAR_CLIENTE];
+    return emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: botones });
   }
 }
 
