@@ -1,30 +1,42 @@
 /**
  * Flujo de CARGA (números de la lista de cargadores).
  *
- *   cualquier mensaje -> menú [Choferes] [Dominios]
- *   -> "Indicá cliente y subcliente" -> se cotejan contra la tabla de clientes
- *   -> "✅ encontrados, mandá el PDF"
- *   -> procesar, avisando el progreso (separar carnets, verificar)
+ *   ¿Qué cliente?      -> menú con los clientes de la tabla (de a páginas si son más de 10)
+ *   ¿Qué operadora?    -> menú con los subclientes de ese cliente
+ *   ¿Qué documentación? -> [Choferes] [Dominios]
+ *   -> mandar el PDF -> procesar, avisando el progreso (separar carnets, verificar)
  *   -> FILTRO DE TIPO: si eligió choferes y el PDF trae vehículos (o al revés), avisa
  *   -> resumen + [Confirmar carga] [Cancelar]
- *   -> guardar en SEA WHITE -> resultado -> menú otra vez
+ *   -> guardar en SEA WHITE -> resultado -> otra carga (mismo cliente u otro)
  *
- * Sin cordialidades: cada mensaje es un dato o un pedido puntual.
+ * Nada se escribe: cliente y operadora se eligen de menús.
  */
+import { nombreYApellido } from "../domain/validators.js";
 import { FormatoNoSoportadoError, unirEnPdf } from "../extraction/aPdf.js";
 import type { RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { CarnetListo } from "../extraction/review.js";
 import type { Cliente } from "../storage/catalogo.js";
 import type { CarnetRegistrado } from "../storage/registro.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
-import { buscar, etiqueta } from "./catalogo.js";
-import { pasoDestino } from "./pasoDestino.js";
+import { buscar, etiqueta, nombreCorto } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
 import type { BotDeps, Emit, LotePendiente } from "./deps.js";
 import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
-const MENU: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
+const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
+const OTRO_CLIENTE: ButtonSpec = { title: "🔄 Otro cliente", payload: "otrocliente" };
+/** Después de una carga: otra del mismo cliente y operadora, otro cliente, o terminar. */
+const MENU_OTRA: ButtonSpec[] = [MENU_TIPO[0]!, MENU_TIPO[1]!, OTRO_CLIENTE, BOTON_FIN];
+/** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
+const MAX_OPCIONES = 10;
+const POR_PAGINA = 8;
+
+/** Títulos de botón únicos (si dos nombres se cortan igual, se les antepone el código). */
+function titulos<T extends { codigo: string; nombre: string }>(items: T[], nombre: (i: T) => string): ButtonSpec[] {
+  const base = items.map((i) => buttonTitle(nombre(i)));
+  return items.map((i, n) => ({ title: base.filter((b) => b === base[n]).length > 1 ? buttonTitle(`${i.codigo} ${nombre(i)}`) : base[n]!, payload: "" }));
+}
 const CONFIRMAR: ButtonSpec = { title: "Confirmar carga", payload: "confirmar" };
 const CANCELAR: ButtonSpec = { title: "Cancelar", payload: "cancelar" };
 
@@ -61,50 +73,89 @@ export class CargadorFlow {
   ) {}
 
   async handle(session: Session, msg: IncomingMessage, payload: string | undefined, emit: Emit): Promise<void> {
+    const nuevo = !session.cargador;
     const st: CargadorState = (session.cargador ??= { etapa: "esperando_datos" });
 
     if (st.etapa === "esperando_confirmacion") return this.enConfirmacion(session, st, payload, emit);
 
-    // [Menú 😊]: vuelve a elegir qué cargar.
-    if (payload === "menu") {
-      session.cargador = { etapa: "esperando_datos" };
-      return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
-    }
+    const clientes = await this.deps.catalogo.listar();
 
-    // Adjuntos.
+    // [Menú 😊] / [🔄 Otro cliente]: de cero, desde el cliente.
+    if (payload === "menu" || payload === "otrocliente") {
+      session.cargador = { etapa: "esperando_datos" };
+      return this.menuClientes(clientes, 0, emit, false);
+    }
+    if (payload?.startsWith("cpag:")) return this.menuClientes(clientes, Number(payload.slice(5)) || 0, emit, false);
+
     // Adjuntos: PDF o fotos de carnets (varias fotos juntas se unen en un solo PDF).
+    // Se guardan aunque todavía falte elegir algo.
     if (st.pdf && !st.archivos) st.archivos = [st.pdf];
     const docs = msg.attachments.filter(esDocumentoAdjunto);
     if (msg.attachments.length > docs.length) await emit({ kind: "text", text: CARGA.soloPdf });
     if (docs.length > 0) st.archivos = [...(st.archivos ?? []), ...docs.map((a) => ({ url: a.url, fileName: nombreArchivo(a) }))];
 
-    // 1) Menú: choferes o dominios.
-    const tipo = payload?.startsWith("tipo:") ? (payload.slice(5) as TipoRegistro) : tipoEscrito(msg.text);
-    if (tipo) {
-      session.cargador = { etapa: "esperando_datos", tipo, archivos: st.archivos, pidioPlanta: true };
-      return emit({ kind: "text", text: CARGA.pedirClienteSubcliente(tipo) });
+    // Lo que eligió en este mensaje.
+    if (payload?.startsWith("cli:")) {
+      if (clientes.some((c) => c.codigo === payload.slice(4))) {
+        st.clienteCodigo = payload.slice(4);
+        st.plantaCodigo = undefined;
+        st.tipo = undefined;
+      }
+    } else if (payload?.startsWith("pla:")) {
+      st.plantaCodigo = payload.slice(4);
+      st.tipo = undefined;
+    } else if (payload?.startsWith("tipo:")) {
+      st.tipo = payload.slice(5) as TipoRegistro;
+    } else {
+      const tipo = tipoEscrito(msg.text);
+      if (tipo && st.plantaCodigo) st.tipo = tipo;
     }
-    if (!st.tipo) return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
 
-    // 2) Cliente y subcliente, cotejados contra la tabla (sin listas: "¿quisiste decir...?").
-    const clientes = await this.deps.catalogo.listar();
-    const paso = pasoDestino(st, msg.text, payload, clientes, CARGA.pedirClienteSubcliente(st.tipo));
-    if (!paso.listo) {
-      for (const out of paso.salida) await emit(out);
-      return;
+    const { cliente, planta } = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
+    const listo = Boolean(cliente && planta && st.tipo);
+    if (docs.length > 0 && !listo) await emit({ kind: "text", text: CARGA.archivoEnEspera });
+
+    // 1) Cliente.
+    if (!cliente) {
+      st.clienteCodigo = undefined;
+      return this.menuClientes(clientes, 0, emit, nuevo);
     }
-    const reconocio = paso.reconocio;
-    const destino = etiqueta(...this.par(clientes, st));
-
-    // 3) PDF.
+    // 2) Operadora.
+    if (!planta) {
+      st.plantaCodigo = undefined;
+      return this.menuOperadoras(cliente, emit);
+    }
+    const destino = etiqueta(cliente, planta);
+    // 3) Qué documentación.
+    if (!st.tipo) return emit({ kind: "buttons", text: CARGA.elegirTipo(destino), buttons: MENU_TIPO });
+    // 4) PDF.
     if (!st.archivos?.length) return emit({ kind: "text", text: CARGA.encontrado(destino, st.tipo) });
-    if (reconocio) await emit({ kind: "text", text: `✅ Cliente y subcliente encontrados: *${destino}*.` });
     return this.procesar(session, st, destino, emit);
   }
 
-  private par(clientes: Cliente[], st: CargadorState) {
-    const b = buscar(clientes, st.clienteCodigo, st.plantaCodigo);
-    return [b.cliente, b.planta] as const;
+  /** Menú de clientes: todos si entran; si no, de a páginas con [⬅️ Anteriores] [➡️ Ver más]. */
+  private menuClientes(clientes: Cliente[], pagina: number, emit: Emit, hola: boolean): Promise<void> {
+    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
+    let botones = opciones;
+    if (opciones.length > MAX_OPCIONES) {
+      const paginas = Math.ceil(opciones.length / POR_PAGINA);
+      const p = Math.min(Math.max(pagina, 0), paginas - 1);
+      botones = [
+        ...(p > 0 ? [{ title: "⬅️ Anteriores", payload: `cpag:${p - 1}` }] : []),
+        ...opciones.slice(p * POR_PAGINA, (p + 1) * POR_PAGINA),
+        ...(p < paginas - 1 ? [{ title: "➡️ Ver más", payload: `cpag:${p + 1}` }] : []),
+      ];
+    }
+    if (!botones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
+    return emit({ kind: "buttons", text: CARGA.elegirCliente(hola), buttons: botones });
+  }
+
+  /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
+  private menuOperadoras(cliente: Cliente, emit: Emit): Promise<void> {
+    const plantas = cliente.plantas.slice(0, MAX_OPCIONES - 1);
+    if (!plantas.length) return emit({ kind: "buttons", text: `*${cliente.nombre}* no tiene operadoras cargadas.`, buttons: [OTRO_CLIENTE, BOTON_FIN] });
+    const botones = titulos(plantas, (p) => p.nombre).map((b, i) => ({ ...b, payload: `pla:${plantas[i]!.codigo}` }));
+    return emit({ kind: "buttons", text: CARGA.elegirOperadora(cliente.nombre), buttons: [...botones, OTRO_CLIENTE] });
   }
 
   // --- Procesamiento ---------------------------------------------------------------
@@ -115,8 +166,8 @@ export class CargadorFlow {
     const tipo = st.tipo!;
     const clienteCodigo = st.clienteCodigo!;
     const plantaCodigo = st.plantaCodigo!;
-    // Pase lo que pase, el próximo mensaje arranca del menú (o va a la confirmación).
-    session.cargador = { etapa: "esperando_datos" };
+    // Pase lo que pase, el próximo mensaje sigue con el mismo cliente y operadora (o va a la confirmación).
+    session.cargador = { etapa: "esperando_datos", clienteCodigo, plantaCodigo };
 
     await emit({ kind: "text", text: CARGA.recibido(nombre) });
 
@@ -201,7 +252,7 @@ export class CargadorFlow {
     if (!lote) {
       // Expiró (o el bot se reinició): no se cargó nada y queda registrado así.
       if (!st.ofreciendoOtro) await this.cerrarRegistro(st.cargaId, "sin_confirmar", null);
-      session.cargador = { etapa: "esperando_datos" };
+      session.cargador = { etapa: "esperando_datos", clienteCodigo: st.clienteCodigo, plantaCodigo: st.plantaCodigo };
       return this.conMenu(emit, CARGA.expirada);
     }
     // Ya se cargó un tipo: se ofrece cargar el otro tipo del mismo documento.
@@ -221,14 +272,14 @@ export class CargadorFlow {
       if (payload === "menu" || payload === "cancelar") {
         this.deps.lotes.borrar(st.loteId);
         session.cargador = { etapa: "esperando_datos" };
-        return emit({ kind: "buttons", text: CARGA.menu, buttons: MENU });
+        return this.menuClientes(await this.deps.catalogo.listar(), 0, emit, false);
       }
       return this.ofrecerOtro(lote, emit);
     }
     if (payload === "cancelar") {
       this.deps.lotes.borrar(st.loteId);
       await this.cerrarRegistro(lote.cargaId, "cancelada", lote.resultado.costoUsd);
-      session.cargador = { etapa: "esperando_datos" };
+      session.cargador = { etapa: "esperando_datos", clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo };
       return this.conMenu(emit, CARGA.cancelada);
     }
     if (payload === "cambiar") {
@@ -240,7 +291,7 @@ export class CargadorFlow {
     const hayDelTipo = lote.resultado.aceptados.some((c) => c.tipo === lote.tipo);
     if (payload === "confirmar" && hayDelTipo) {
       this.deps.lotes.borrar(st.loteId);
-      session.cargador = { etapa: "esperando_datos" };
+      session.cargador = { etapa: "esperando_datos", clienteCodigo: lote.clienteCodigo, plantaCodigo: lote.plantaCodigo };
       return this.confirmar(session, lote, emit);
     }
     // Cualquier otra cosa: se repite la pregunta pendiente con SUS botones
@@ -277,6 +328,7 @@ export class CargadorFlow {
       subcliente: lote.plantaCodigo,
       identificador: c.identificador,
       vencimiento: c.vencimiento,
+      razonSocial: c.tipo === "chofer" ? nombreYApellido(c.apellidoNombre) : null,
       pdf: c.pdf,
     }));
     let resumen: ResumenCarga;
@@ -334,7 +386,7 @@ export class CargadorFlow {
    * separados, WhatsApp a veces entregaba primero la pregunta y después el resultado.
    */
   private async conMenu(emit: Emit, texto: string): Promise<void> {
-    return emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: MENU });
+    return emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: MENU_OTRA });
   }
 }
 

@@ -106,7 +106,7 @@ describe("candados de la carga", () => {
       [registro("30123456"), registro("30.123.456")], // identificador sin normalizar
       [registro("30123456", { vencimiento: "31/12/2027" })], // formato de fecha
       [registro("30123456", { vencimiento: "31-02-2027" })], // fecha inexistente
-      [registro("30123456", { subcliente: "12" })], // código inválido
+      [registro("30123456", { subcliente: "00A1" })], // código inválido (sólo números)
       [registro("30123456", { pdf: Buffer.from("no soy un pdf") })],
     ];
     for (const lote of malos) {
@@ -137,11 +137,21 @@ describe("candados de la carga", () => {
     expect(r).toMatchObject({ total: 45, correctos: 45, errores: 0 });
   });
 
-  it("dominio usa el campo Dominio", async () => {
+  it("chofer: manda la razón social (Razon_Social) y los códigos de 4 dígitos tal cual", async () => {
+    const f = fakeFetch(() => okCarga(["30123456"]));
+    await client(f.fn, { modoPrueba: false }).cargar("chofer", [registro("30123456", { cliente: "0001", subcliente: "0000", razonSocial: "JUAN CARLOS PEREZ" })]);
+    const form = f.calls.find((c) => c.method === "POST" && c.url.endsWith("/chofer"))!.body as FormData;
+    expect(form.get("Registros[0].Cliente")).toBe("0001");
+    expect(form.get("Registros[0].Subcliente")).toBe("0000");
+    expect(form.get("Registros[0].Razon_Social")).toBe("JUAN CARLOS PEREZ");
+  });
+
+  it("dominio usa el campo Dominio (y no lleva razón social)", async () => {
     const f = fakeFetch(() => Response.json({ ok: true, total: 1, procesadosCorrectamente: 1, errores: 0, resultados: [{ ok: true, dominio: "AA123BB", id: 5, accion: "CREADO" }] }));
     const r = await client(f.fn).cargar("dominio", [registro("AA123BB")]);
     const form = f.calls.find((c) => c.method === "POST" && c.url.endsWith("/dominio"))!.body as FormData;
     expect(form.get("Registros[0].Dominio")).toBe("AA123BB");
+    expect(form.get("Registros[0].Razon_Social")).toBeNull();
     expect(r.resultados[0]).toMatchObject({ identificador: "AA123BB", ok: true, accion: "CREADO", id: 5 });
   });
 

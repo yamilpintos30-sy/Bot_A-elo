@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCodigoValido, normalizeDni, normalizePatente } from "../src/domain/validators.js";
+import { isCodigoValido, nombreYApellido, normalizeDni, normalizePatente } from "../src/domain/validators.js";
 import { diffDays, formatApi, parseCalendarDate } from "../src/utils/dates.js";
 import { nationalPhone, parsePhoneList, samePhone } from "../src/utils/phones.js";
 
@@ -17,9 +17,19 @@ describe("DNI y patente", () => {
     expect(normalizePatente("ABCDEFG").ok).toBe(false);
   });
 
-  it("códigos de cliente de 6 dígitos", () => {
+  it("códigos de cliente: sólo números, con los ceros a la izquierda (hoy 4 dígitos)", () => {
+    expect(isCodigoValido("0001")).toBe(true);
+    expect(isCodigoValido("0000")).toBe(true);
     expect(isCodigoValido("000001")).toBe(true);
-    expect(isCodigoValido("1")).toBe(false);
+    expect(isCodigoValido("00A1")).toBe(false);
+    expect(isCodigoValido("")).toBe(false);
+  });
+
+  it("razón social del chofer: nombre y apellido", () => {
+    expect(nombreYApellido("PEREZ, JUAN CARLOS")).toBe("JUAN CARLOS PEREZ");
+    expect(nombreYApellido("PAILEMAN FELTAÑO,  MARTIN   JAVIER")).toBe("MARTIN JAVIER PAILEMAN FELTAÑO");
+    expect(nombreYApellido("JUAN PEREZ")).toBe("JUAN PEREZ");
+    expect(nombreYApellido(null)).toBeNull();
   });
 });
 

@@ -29,7 +29,7 @@ describe("aislamiento de Enri en Supabase", () => {
   it("el SQL del bot sólo crea o modifica tablas anelo_*", () => {
     const dir = path.resolve("supabase/migrations");
     const sql = readdirSync(dir).map((f) => readFileSync(path.join(dir, f), "utf8")).join("\n");
-    const tablas = [...sql.matchAll(/(?:create table if not exists|alter table|insert into|update|delete from)\s+(?:public\.)?(\w+)/gi)].map((m) => m[1]!);
+    const tablas = [...sql.matchAll(/(?:create table if not exists|alter table|insert into|(?<!do )update|delete from)\s+(?:public\.)?(\w+)/gi)].map((m) => m[1]!);
     expect(tablas.length).toBeGreaterThan(0);
     expect(tablas.filter((t) => !t.startsWith("anelo_"))).toEqual([]);
   });

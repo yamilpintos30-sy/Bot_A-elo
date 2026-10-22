@@ -103,7 +103,18 @@ export function looksLikePatente(input: string): boolean {
   return /^[A-Z0-9]{6,8}$/.test(cleaned) && /\d/.test(cleaned) && /[A-Z]/.test(cleaned);
 }
 
-/** Código de cliente o subcliente: 6 dígitos (convención de la API, ej. 000001). */
+/**
+ * Código de cliente o subcliente: sólo números, y se respetan los ceros a la
+ * izquierda tal como vienen (hoy 4 dígitos: 0001, 0000; antes eran 6).
+ */
 export function isCodigoValido(codigo: string): boolean {
-  return /^\d{6}$/.test(codigo);
+  return /^\d{1,10}$/.test(codigo);
+}
+
+/** "PEREZ, JUAN CARLOS" -> "JUAN CARLOS PEREZ" (razón social del chofer para la API). Sin coma, queda igual. */
+export function nombreYApellido(apellidoNombre: string | null | undefined): string | null {
+  const t = (apellidoNombre ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  const [apellido, nombre] = t.split(",").map((x) => x.trim());
+  return apellido && nombre ? `${nombre} ${apellido}` : t.replace(/,/g, "").trim();
 }

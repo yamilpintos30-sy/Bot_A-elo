@@ -205,30 +205,38 @@ describe("reconocimiento de cliente y planta", () => {
 });
 
 
+/** Carga: [Menú] -> cliente -> operadora -> tipo (todo por menús). Queda esperando el PDF. */
+async function elegirCarga(say: Awaited<ReturnType<typeof setup>>["say"], tipo: string, cliente = "Total Austral", operadora = "Planta 1") {
+  await say(CARGADOR, "Menú 😊");
+  await say(CARGADOR, cliente);
+  await say(CARGADOR, operadora);
+  return say(CARGADOR, tipo);
+}
+
 /** Carga completa por el flujo del cargador (para preparar datos de los tests de consulta). */
-async function cargar(say: Awaited<ReturnType<typeof setup>>["say"], tipo: "👤 Choferes" | "🚛 Dominios", destino: string) {
-  await say(CARGADOR, "hola");
-  await say(CARGADOR, tipo);
-  await say(CARGADOR, destino);
-  await say(CARGADOR, "✅ Sí");
+async function cargar(say: Awaited<ReturnType<typeof setup>>["say"], tipo: "👤 Choferes" | "🚛 Dominios", cliente = "Total Austral", operadora = "Planta 1") {
+  await elegirCarga(say, tipo, cliente, operadora);
   await say(CARGADOR, "", [pdfAdj()]);
   return say(CARGADOR, "Confirmar carga");
 }
 
 describe("cargador", () => {
-  it("menú -> cliente y subcliente cotejados -> PDF con avisos de progreso -> Confirmar -> carga", async () => {
+  it("cliente (menú) -> operadora (menú) -> tipo -> PDF con avisos de progreso -> Confirmar -> carga", async () => {
     const { say, seawhite, registro } = setup();
 
     let outs = await say(CARGADOR, "hola, qué tal");
-    expect(texts(outs)).toBe("¿Qué documentación vas a cargar?");
+    expect(texts(outs)).toBe("¡Hola! 👋\n¿Qué *cliente* vas a cargar?");
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+
+    outs = await say(CARGADOR, "Total Austral");
+    expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2", "🔄 Otro cliente"]);
+
+    outs = await say(CARGADOR, "Planta 1");
+    expect(texts(outs)).toBe("*TOTAL AUSTRAL – Planta 1*\n¿Qué documentación vas a cargar?");
     expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
 
     outs = await say(CARGADOR, "👤 Choferes");
-    expect(texts(outs)).toMatch(/Carga de \*choferes\*.*Indicá \*cliente y subcliente\*/s);
-
-    await say(CARGADOR, "Total planta 1");
-    outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toMatch(/✅ Cliente y subcliente encontrados: \*TOTAL AUSTRAL – Planta 1\*/);
     expect(texts(outs)).toMatch(/Mandá el PDF \(o las fotos\) con los carnets de personas/);
 
     outs = await say(CARGADOR, "", [pdfAdj()]);
@@ -243,113 +251,114 @@ describe("cargador", () => {
     outs = await say(CARGADOR, "Confirmar carga");
     expect(seawhite.cargas).toHaveLength(1);
     expect(seawhite.cargas[0]!.tipo).toBe("chofer");
-    expect(seawhite.cargas[0]!.registros.map((r) => [r.cliente, r.subcliente, r.identificador, r.vencimiento])).toEqual([
-      ["999991", "000001", "33615617", "18-10-2026"],
-      ["999991", "000001", "29642599", "31-10-2026"],
+    expect(seawhite.cargas[0]!.registros.map((r) => [r.cliente, r.subcliente, r.identificador, r.vencimiento, r.razonSocial])).toEqual([
+      ["999991", "000001", "33615617", "18-10-2026", "PERSONA 33615617"],
+      ["999991", "000001", "29642599", "31-10-2026", "PERSONA 29642599"],
     ]);
     expect(texts(outs)).toMatch(/Guardando 2 carnets en el sistema/);
     expect(texts(outs)).toMatch(/Carga completada.*2 cargados \(2 nuevos\)/s);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]); // listo para otra carga
+    // Otra carga: mismo cliente y operadora, u otro cliente.
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
     expect(registro.carnets.map((c) => [c.identificador, c.seawhiteId])).toEqual([
       ["33615617", 1],
       ["29642599", 2],
     ]);
   });
 
-  it("todo en un mensaje (cliente + subcliente + PDF) después de elegir el tipo", async () => {
+  it("razón social: nombre y apellido (el carnet dice APELLIDO, NOMBRE); los dominios no la llevan", async () => {
+    const { say, seawhite } = setup({
+      procesar: async () => resultado([carnet("33615617", "18-10-2026", { apellidoNombre: "PEREZ, JUAN CARLOS" }), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null })]),
+    });
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
+    await say(CARGADOR, "Confirmar carga");
+    await say(CARGADOR, "🚛 Cargar dominios");
+    await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas.map((c) => [c.tipo, c.registros[0]!.razonSocial])).toEqual([
+      ["chofer", "JUAN CARLOS PEREZ"],
+      ["dominio", null],
+    ]);
+  });
+
+  it("otra carga: mismo cliente y operadora con [Choferes]/[Dominios], o [🔄 Otro cliente]", async () => {
     const { say, procesar } = setup();
-    await say(CARGADOR, "Choferes");
-    await say(CARGADOR, "total p1", [pdfAdj()]);
-    const outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados/);
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
+    await say(CARGADOR, "Confirmar carga");
+    let outs = await say(CARGADOR, "🚛 Dominios");
+    expect(texts(outs)).toMatch(/\*TOTAL AUSTRAL – Planta 1\* – dominios.*Mandá el PDF/s); // no vuelve a preguntar cliente
+    await say(CARGADOR, "", [pdfAdj()]);
+    await say(CARGADOR, "Cancelar");
+    outs = await say(CARGADOR, "🔄 Otro cliente");
+    expect(texts(outs)).toBe("¿Qué *cliente* vas a cargar?");
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+    expect(procesar).toHaveBeenCalledTimes(2);
+  });
+
+  it("cliente con una sola operadora: igual se elige del menú", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "hola");
+    const outs = await say(CARGADOR, "Vista Energy");
+    expect(texts(outs)).toBe("*VISTA ENERGY*\n¿Qué *operadora*?");
+    expect(buttons(outs)).toEqual(["Planta 1", "🔄 Otro cliente"]);
+  });
+
+  it("escribir el cliente en vez de tocar el menú: se repite el menú (no se escribe nada)", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "hola");
+    const outs = await say(CARGADOR, "total planta 1");
+    expect(texts(outs)).toMatch(/¿Qué \*cliente\* vas a cargar\?/);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+  });
+
+  it("el archivo mandado antes de terminar de elegir se guarda y se procesa al completar", async () => {
+    const { say, procesar } = setup();
+    let outs = await say(CARGADOR, "", [pdfAdj()]);
+    expect(texts(outs)).toMatch(/Guardé el archivo\. Primero elegí cliente, operadora y qué documentación es/);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+    await say(CARGADOR, "Total Austral");
+    await say(CARGADOR, "Planta 1");
+    expect(procesar).not.toHaveBeenCalled();
+    outs = await say(CARGADOR, "👤 Choferes");
     expect(procesar).toHaveBeenCalledTimes(1);
     expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
   });
 
-  it("cliente inexistente: lo dice SIN listar los clientes", async () => {
-    const { say } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    const outs = await say(CARGADOR, "Shell planta 2");
-    expect(texts(outs)).toMatch(/❌ No se encontró ese \*cliente y subcliente\*\. Escribilos de nuevo\./);
-    expect(texts(outs)).not.toMatch(/Total Austral|Vista Energy/);
+  it("más de 10 clientes: el menú va de a páginas con [➡️ Ver más] y [⬅️ Anteriores]", async () => {
+    const { say, deps } = setup();
+    const muchos = Array.from({ length: 19 }, (_, i) => ({
+      codigo: String(i + 1).padStart(4, "0"),
+      nombre: `CLIENTE ${String(i + 1).padStart(2, "0")}`,
+      alias: [],
+      plantas: [{ codigo: "0000", nombre: "OPERADORAS TODAS", alias: [] }],
+    }));
+    deps.catalogo = new MemoryCatalogo(muchos);
+    let outs = await say(CARGADOR, "hola");
+    expect(buttons(outs)).toEqual([...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 1).padStart(2, "0")}`), "➡️ Ver más"]);
+    outs = await say(CARGADOR, "➡️ Ver más");
+    expect(buttons(outs)).toEqual(["⬅️ Anteriores", ...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 9).padStart(2, "0")}`), "➡️ Ver más"]);
+    outs = await say(CARGADOR, "➡️ Ver más");
+    expect(buttons(outs)).toEqual(["⬅️ Anteriores", "Cliente 17", "Cliente 18", "Cliente 19"]);
+    outs = await say(CARGADOR, "Cliente 18");
+    expect(texts(outs)).toBe("*CLIENTE 18*\n¿Qué *operadora*?");
+    expect(buttons(outs)).toEqual(["OPERADORAS TODAS", "🔄 Otro cliente"]);
   });
 
-  it("subcliente inexistente: lo dice SIN listar las plantas", async () => {
-    const { say } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    const outs = await say(CARGADOR, "total planta 9");
-    expect(texts(outs)).toMatch(/No encontré ese subcliente en \*Total Austral\*/);
-    expect(texts(outs)).not.toMatch(/Planta 2/);
-  });
-
-  it("solo el cliente: pregunta el subcliente por texto, sin botones de plantas", async () => {
-    const { say } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    const outs = await say(CARGADOR, "Total");
-    expect(texts(outs)).toMatch(/Qué \*subcliente\* de \*Total Austral\*/);
-    expect(buttons(outs)).not.toContain("Planta 1");
-  });
-
-  it("mal escrito: '¿Quisiste decir...?' -> Sí -> sigue con ese cliente y subcliente", async () => {
-    const { say, procesar } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    let outs = await say(CARGADOR, "tatal planta 1");
-    expect(texts(outs)).toMatch(/Quisiste decir \*Total Austral – Planta 1\*/);
-    expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
-    outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados: \*TOTAL AUSTRAL – Planta 1\*/);
-    outs = await say(CARGADOR, "", [pdfAdj()]);
-    expect(procesar).toHaveBeenCalledTimes(1);
-  });
-
-  it("mal escrito: '¿Quisiste decir...?' -> No -> lo vuelve a pedir", async () => {
-    const { say } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "vistaa energi 1");
-    let outs = await say(CARGADOR, "✏️ No");
-    expect(texts(outs)).toMatch(/escribí el \*cliente y subcliente\* correctos/);
-    await say(CARGADOR, "Total planta 2");
-    outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toMatch(/encontrados: \*TOTAL AUSTRAL – Planta 2\*/);
-  });
-
-  it("CONFIRMACIÓN: aunque coincida exacto, pregunta [Sí] [No] antes de seguir", async () => {
-    const { say, procesar } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    let outs = await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    expect(texts(outs)).toMatch(/🔎 Encontré \*Total Austral – Planta 1\*\. ¿Es correcto\?/);
-    expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
-    expect(procesar).not.toHaveBeenCalled(); // el PDF espera la confirmación
-    outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toMatch(/Cliente y subcliente encontrados: \*TOTAL AUSTRAL – Planta 1\*/);
-    expect(procesar).toHaveBeenCalledTimes(1);
-  });
-
-  it("CONFIRMACIÓN: con [No] no queda elegido nada y lo vuelve a pedir", async () => {
-    const { say, procesar } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1");
-    let outs = await say(CARGADOR, "✏️ No");
-    expect(texts(outs)).toMatch(/escribí el \*cliente y subcliente\* correctos/);
-    outs = await say(CARGADOR, "", [pdfAdj()]);
-    expect(procesar).not.toHaveBeenCalled(); // sin cliente confirmado no se procesa nada
-    outs = await say(CARGADOR, "Vista planta 1");
-    expect(texts(outs)).toMatch(/Encontré \*Vista Energy – Planta 1\*/);
-  });
-
-  it("no adivina: algo que no se parece a ningún cliente no sugiere nada", async () => {
-    const { say } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    const outs = await say(CARGADOR, "pluspetrol planta 1");
-    expect(texts(outs)).not.toMatch(/Quisiste decir/);
-    expect(texts(outs)).toMatch(/No se encontró ese \*cliente y subcliente\*/);
+  it("códigos de 4 dígitos (0001 / 0000) llegan tal cual a SEA WHITE", async () => {
+    const { say, seawhite, deps } = setup();
+    deps.catalogo = new MemoryCatalogo([{ codigo: "0001", nombre: "HALLIBURTON ARGENTINA SRL", alias: ["halliburton"], plantas: [{ codigo: "0000", nombre: "OPERADORAS TODAS", alias: [] }] }]);
+    await elegirCarga(say, "👤 Choferes", "Halliburton", "OPERADORAS TODAS");
+    await say(CARGADOR, "", [pdfAdj()]);
+    await say(CARGADOR, "Confirmar carga");
+    expect(seawhite.cargas[0]!.registros.map((r) => [r.cliente, r.subcliente])).toEqual([
+      ["0001", "0000"],
+      ["0001", "0000"],
+    ]);
   });
 
   it("FILTRO DE TIPO: eligió dominios y el PDF es de choferes -> avisa y no carga", async () => {
     const { say, seawhite } = setup();
-    await say(CARGADOR, "🚛 Dominios");
-    await say(CARGADOR, "Total planta 1");
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "🚛 Dominios");
     let outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/Elegiste cargar \*dominios\*, pero el PDF tiene 2 carnets de personas/);
     expect(buttons(outs)).toEqual(["Cargar choferes", "Cancelar"]);
@@ -367,9 +376,7 @@ describe("cargador", () => {
     const { say, seawhite } = setup({
       procesar: async () => resultado([carnet("33615617", "18-10-2026"), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null, pagina: 2 })]),
     });
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1");
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
     let outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/⚠️ También hay 1 vehículo: ahora van solo las personas\. Al terminar te ofrezco cargarlo\./);
     expect(texts(outs)).toMatch(/1 listo para cargar \(1 persona\)/);
@@ -407,9 +414,7 @@ describe("cargador", () => {
           return { ...r, manifest: { modo: "listado", carnets: [], descartados: [] } };
         },
       });
-      await say(CARGADOR, boton);
-      await say(CARGADOR, "Total planta 1");
-      await say(CARGADOR, "✅ Sí");
+      await elegirCarga(say, boton);
       const t = texts(await say(CARGADOR, "", [pdfAdj("PAE SLB - Estatus.pdf")]));
       expect(t).toMatch(/📋 Es un listado de estado/);
       expect(t).toMatch(aviso);
@@ -425,9 +430,7 @@ describe("cargador", () => {
         return { ...r, manifest: { modo: "listado", carnets: [], descartados: [] } };
       },
     });
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1");
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
     let outs = await say(CARGADOR, "", [pdfAdj("PAE SLB - Estatus.pdf")]);
     expect(texts(outs)).toMatch(/Estoy procesando el documento/);
     expect(texts(outs)).toMatch(/📋 Es un listado de estado: cada uno se sube con el documento completo y su fila marcada/);
@@ -445,24 +448,21 @@ describe("cargador", () => {
     const { say, seawhite } = setup({
       procesar: async () => resultado([carnet("33615617", "18-10-2026"), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null, pagina: 2 })]),
     });
-    await say(CARGADOR, "🚛 Dominios");
-    await say(CARGADOR, "Total planta 1");
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "🚛 Dominios");
     await say(CARGADOR, "", [pdfAdj()]);
     await say(CARGADOR, "Confirmar carga");
     const outs = await say(CARGADOR, "Menú 😊");
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
     expect(seawhite.cargas.map((c) => c.tipo)).toEqual(["dominio"]);
   });
 
   it("Cancelar no carga nada y vuelve al menú", async () => {
     const { say, seawhite } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
     const outs = await say(CARGADOR, "Cancelar");
     expect(texts(outs)).toMatch(/cancelada/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
     expect(seawhite.cargas).toHaveLength(0);
   });
 
@@ -476,9 +476,8 @@ describe("cargador", () => {
           carnet("24157723", "29-10-2027", { observaciones: "Inhabilitado para conducir" }), // habilitado con una restricción
         ]),
     });
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    const outs = await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    const outs = await say(CARGADOR, "", [pdfAdj()]);
     const t = texts(outs);
     expect(t).toMatch(
       /⚠️ No habilitados hoy:\n• PERSONA 33615450 \(33615450\): habilitado hasta el 23\/09\/2026 \(licencia de conducir\)\n• PERSONA 44444444 \(44444444\): inhabilitado \(trámite incompleto\)/,
@@ -490,13 +489,11 @@ describe("cargador", () => {
 
   it("REGISTRO: Cancelar o 'Eso es todo' con la carga pendiente -> cancelada (no queda 'procesando')", async () => {
     const { say, registro } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
     await say(CARGADOR, "Cancelar");
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj("otro.pdf")]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj("otro.pdf")]);
     await say(CARGADOR, "Eso es todo, gracias");
     expect(registro.cargas.map((c) => [c.archivo, c.estado])).toEqual([
       ["carnets.pdf", "cancelada"],
@@ -506,9 +503,8 @@ describe("cargador", () => {
 
   it("REGISTRO: si la carga pendiente expiró -> sin_confirmar", async () => {
     const { say, registro, deps } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
     deps.lotes = new LotesPendientes(-1); // el lote ya no existe (expiró o el bot se reinició)
     const outs = await say(CARGADOR, "Confirmar carga");
     expect(texts(outs)).toMatch(/expiró/);
@@ -519,9 +515,8 @@ describe("cargador", () => {
     const { say, registro } = setup({
       procesar: async () => resultado([carnet("33615617", "18-10-2026"), carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null, pagina: 2 })]),
     });
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
     await say(CARGADOR, "Confirmar carga");
     await say(CARGADOR, "🚛 Cargar dominios");
     await say(CARGADOR, "Confirmar carga");
@@ -540,9 +535,8 @@ describe("cargador", () => {
 
   it("con una carga pendiente de confirmar no acepta otra", async () => {
     const { say, procesar } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
     const outs = await say(CARGADOR, "vista", [pdfAdj("otro.pdf")]);
     expect(texts(outs)).toMatch(/carga pendiente de confirmar/);
     expect(procesar).toHaveBeenCalledTimes(1);
@@ -559,9 +553,7 @@ describe("cargador", () => {
     const { say, deps, procesar } = setup();
     const jpg = readFileSync("assets/javier.jpg");
     deps.descargarAdjunto = vi.fn(async () => jpg);
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1");
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
     const foto = (n: string): IncomingAttachment => ({ url: `https://chatwoot/${n}`, fileType: "image", contentType: "image/jpeg", fileName: n });
     const outs = await say(CARGADOR, "", [foto("carnet1.jpg"), foto("carnet2.jpg")]);
     expect(texts(outs)).toMatch(/Recibí \*2 archivos\*/);
@@ -575,36 +567,33 @@ describe("cargador", () => {
   it("un archivo que dice ser foto pero no lo es: avisa y no procesa", async () => {
     const { say, deps, procesar } = setup();
     deps.descargarAdjunto = vi.fn(async () => Buffer.from("esto no es una imagen"));
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [{ url: "https://chatwoot/x.jpg", fileType: "image", fileName: "x.jpg" }]);
-    const outs = await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    const outs = await say(CARGADOR, "", [{ url: "https://chatwoot/x.jpg", fileType: "image", fileName: "x.jpg" }]);
     expect(texts(outs)).toMatch(/"x\.jpg" no es un PDF ni una foto JPG o PNG/);
     expect(procesar).not.toHaveBeenCalled();
   });
 
   it("si no queda ningún carnet apto lo informa y vuelve al menú", async () => {
     const { say } = setup({ procesar: async () => resultado([], [{ pagina: 1, referencia: "—", motivo: "Carnet ilegible" }]) });
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "total p1", [pdfAdj()]);
-    const outs = await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    const outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/ningún carnet apto.*Carnet ilegible/s);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
   });
 
   it("si falla el procesamiento lo informa y vuelve al menú", async () => {
     const { say } = setup({ procesar: async () => Promise.reject(new Error("timeout de Claude")) });
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "total p1", [pdfAdj()]);
-    const outs = await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    const outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/No pude procesar el PDF: timeout de Claude/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
   });
 
   it("los cargadores no consultan: un DNI les abre el menú de carga", async () => {
     const { say } = setup();
     const outs = await say(CARGADOR, "33615617");
     expect(texts(outs)).not.toMatch(/habilitado/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
   });
 });
 
@@ -645,7 +634,7 @@ describe("chofer", () => {
 
   it("Habilitación -> cliente y subcliente -> Por DNI -> DNI -> credencial en ESA planta -> su carnet -> Menú/Consulta/Eso es todo", async () => {
     const { say } = setup();
-    await cargar(say, "👤 Choferes", "Total planta 1");
+    await cargar(say, "👤 Choferes");
     await say(CHOFER, "hola");
 
     let outs = await say(CHOFER, "🪪 Habilitación");
@@ -678,7 +667,7 @@ describe("chofer", () => {
 
   it("[🔎 Consulta] sigue en la misma planta; [Menú 😊] vuelve al inicio y borra la planta", async () => {
     const { say } = setup({ procesar: async () => resultado([carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null })]) });
-    await cargar(say, "🚛 Dominios", "Total planta 1");
+    await cargar(say, "🚛 Dominios");
     await enPlanta(say);
     await say(CHOFER, "🪪 Por DNI");
     let outs = await say(CHOFER, "30123456"); // sin credencial
@@ -709,7 +698,7 @@ describe("chofer", () => {
 
   it("en el menú principal no toma un DNI suelto: hay que elegir la rama", async () => {
     const { say } = setup();
-    await cargar(say, "👤 Choferes", "Total planta 1");
+    await cargar(say, "👤 Choferes");
     let outs = await say(CHOFER, "cheee puedo entrar? 33615617");
     expect(buttons(outs)).toEqual(MENU);
     expect(texts(outs)).not.toMatch(/PERSONA 33615617/);
@@ -722,7 +711,7 @@ describe("chofer", () => {
 
   it("con la planta elegida, un DNI escrito sin tocar [Por DNI] se consulta igual", async () => {
     const { say } = setup();
-    await cargar(say, "👤 Choferes", "Total planta 1");
+    await cargar(say, "👤 Choferes");
     await enPlanta(say);
     const outs = await say(CHOFER, "33615617");
     expect(texts(outs)).toMatch(/PERSONA 33615617.*Planta 1: ⚠️ habilitado/s);
@@ -807,7 +796,7 @@ describe("chofer", () => {
 
   it("consulta SOLO la planta declarada: el mismo DNI en otra planta no cuenta", async () => {
     const { say } = setup();
-    await cargar(say, "👤 Choferes", "Total planta 1");
+    await cargar(say, "👤 Choferes");
     await enPlanta(say, "Total planta 2");
     await say(CHOFER, "🪪 Por DNI");
     const outs = await say(CHOFER, "33615617");
@@ -915,20 +904,19 @@ describe("pie y cierre (como Enri)", () => {
 
   it("el cargador que cierra con una carga sin confirmar la cancela", async () => {
     const { say, seawhite } = setup();
-    await say(CARGADOR, "👤 Choferes");
-    await say(CARGADOR, "Total planta 1", [pdfAdj()]);
-    await say(CARGADOR, "✅ Sí");
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
     const outs = await say(CARGADOR, "Eso es todo, gracias");
     expect(texts(outs)).toMatch(/carga pendiente se canceló: no se cargó nada/);
     await say(CARGADOR, "Confirmar carga");
     expect(seawhite.cargas).toHaveLength(0);
   });
 
-  it("el cargador vuelve a elegir tipo con [Menú 😊]", async () => {
+  it("el cargador vuelve a elegir el cliente con [Menú 😊]", async () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
     const outs = await say(CARGADOR, "Menú 😊");
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
   });
 });
 
@@ -960,7 +948,7 @@ describe("app cerrada: sólo responde a los números de las listas", () => {
     const { say, deps } = setup();
     deps.consultores = new MemoryListaTelefonos([]);
     const outs = await say(CARGADOR, "hola");
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
   });
 
   it("un número agregado a la lista rige desde el mensaje siguiente (aunque ya haya recibido el aviso)", async () => {

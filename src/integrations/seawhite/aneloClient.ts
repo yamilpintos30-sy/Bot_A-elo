@@ -190,7 +190,7 @@ export class AneloClient {
 
   private validarRegistro(tipo: TipoRegistro, r: RegistroCarga): RegistroCarga {
     if (!isCodigoValido(r.cliente) || !isCodigoValido(r.subcliente)) {
-      throw new SeaWhiteError(`Código de cliente/subcliente inválido (${r.cliente}/${r.subcliente}): deben ser 6 dígitos.`);
+      throw new SeaWhiteError(`Código de cliente/subcliente inválido (${r.cliente}/${r.subcliente}): deben ser sólo números.`);
     }
     const id = tipo === "chofer" ? normalizeDni(r.identificador) : normalizePatente(r.identificador);
     if (!id.ok || id.value !== r.identificador) {
@@ -214,6 +214,8 @@ export class AneloClient {
         form.append(`Registros[${i}].Subcliente`, r.subcliente);
         form.append(`Registros[${i}].${campo}`, r.identificador);
         form.append(`Registros[${i}].Vencimiento`, r.vencimiento);
+        // Nombre y apellido del chofer (campo nuevo del manual: "razon_Social"). Los dominios no lo llevan.
+        if (tipo === "chofer" && r.razonSocial) form.append(`Registros[${i}].Razon_Social`, r.razonSocial);
         // Convención de la API: <DNI>.pdf o <DOMINIO>.pdf
         form.append(`Registros[${i}].Archivo`, new Blob([new Uint8Array(r.pdf)], { type: "application/pdf" }), `${r.identificador}.pdf`);
       });

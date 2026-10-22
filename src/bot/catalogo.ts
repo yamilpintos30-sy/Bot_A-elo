@@ -33,7 +33,7 @@ function numeroPlanta(p: Planta): number[] {
 
 export function resolverCliente(texto: string, clientes: Cliente[]): Cliente | undefined {
   const t = normalizeText(texto);
-  const codigos: string[] = t.match(/\b\d{6}\b/g) ?? [];
+  const codigos: string[] = t.match(/\b\d{4,10}\b/g) ?? [];
   const porCodigo = clientes.find((c) => codigos.includes(c.codigo));
   if (porCodigo) return porCodigo;
 
@@ -49,8 +49,8 @@ export function resolverCliente(texto: string, clientes: Cliente[]): Cliente | u
 
 export function resolverPlanta(texto: string, cliente: Cliente): Planta | undefined {
   const t = normalizeText(texto);
-  // Códigos: el de planta es el de 6 dígitos que no es el del cliente.
-  const codigos = (t.match(/\b\d{6}\b/g) ?? []).filter((c) => c !== cliente.codigo);
+  // Códigos: el de planta es el número que no es el del cliente.
+  const codigos = (t.match(/\b\d{4,10}\b/g) ?? []).filter((c) => c !== cliente.codigo);
   const porCodigo = cliente.plantas.find((p) => codigos.includes(p.codigo));
   if (porCodigo) return porCodigo;
 

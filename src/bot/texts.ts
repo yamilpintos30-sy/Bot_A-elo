@@ -86,11 +86,17 @@ export const DESTINO = {
 };
 
 export const CARGA = {
+  /** Paso 1: cliente (menú, de la tabla de clientes). */
+  elegirCliente: (hola: boolean) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?`,
+  /** Paso 2: operadora (subcliente) del cliente elegido. */
+  elegirOperadora: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
+  /** Paso 3: tipo de documentación. */
+  elegirTipo: (destino: string) => `*${destino}*\n¿Qué documentación vas a cargar?`,
   menu: "¿Qué documentación vas a cargar?",
   otraCarga: "¿Querés cargar otra documentación?",
-  pedirClienteSubcliente: (tipo: "chofer" | "dominio") =>
-    `${TIPO[tipo].emoji} Carga de *${TIPO[tipo].plural}*.\nIndicá *cliente y subcliente*.`,
-  encontrado: (destino: string, tipo: "chofer" | "dominio") => `✅ Cliente y subcliente encontrados: *${destino}*.\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,
+  /** Mandó el archivo antes de terminar de elegir: se guarda y se sigue con lo que falta. */
+  archivoEnEspera: "📎 Guardé el archivo. Primero elegí cliente, operadora y qué documentación es.",
+  encontrado: (destino: string, tipo: "chofer" | "dominio") => `${TIPO[tipo].emoji} *${destino}* – ${TIPO[tipo].plural}\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,
   soloPdf: "Solo se aceptan archivos PDF o fotos (JPG o PNG) de los carnets.",
   /** Todavía no se sabe si son carnets o un listado: texto neutro. */
   recibido: (archivo: string) => `📥 Recibí *${archivo}*. Estoy procesando el documento; puede tardar uno o dos minutos.`,

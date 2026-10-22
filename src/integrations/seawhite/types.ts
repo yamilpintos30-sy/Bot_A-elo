@@ -72,6 +72,8 @@ export interface RegistroCarga {
   identificador: string;
   /** Formato de la API: dd-MM-yyyy. */
   vencimiento: string;
+  /** Sólo choferes: nombre y apellido ("JUAN CARLOS PEREZ"). */
+  razonSocial?: string | null;
   pdf: Buffer;
 }
 
