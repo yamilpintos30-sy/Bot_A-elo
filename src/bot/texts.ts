@@ -183,7 +183,12 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
   const errores = resumen.resultados.filter((r) => !r.ok);
   const titulo = errores.length === 0 ? "✅ *Carga completada*" : ok.length === 0 ? "❌ *La carga falló*" : "⚠️ *Carga completada con errores*";
   const lineas = [titulo, destino, `${ok.length} cargado${ok.length === 1 ? "" : "s"}${detalle ? ` (${detalle})` : ""}`];
-  if (errores.length) lineas.push("", `❌ ${errores.length} con error:`, ...errores.map((e) => `• ${e.identificador}: ${e.mensaje ?? "sin detalle"}`));
+  if (errores.length) {
+    // Si todos fallaron por lo mismo (p. ej. un candado o SEA WHITE caído), el motivo va una sola vez.
+    const motivos = new Set(errores.map((e) => e.mensaje ?? "sin detalle"));
+    if (errores.length > 1 && motivos.size === 1) lineas.push("", `❌ ${errores.length} con error: ${[...motivos][0]}`);
+    else lineas.push("", `❌ ${errores.length} con error:`, ...errores.map((e) => `• ${e.identificador}: ${e.mensaje ?? "sin detalle"}`));
+  }
   return lineas.join("\n");
 }
 

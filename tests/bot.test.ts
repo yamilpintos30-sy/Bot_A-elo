@@ -541,6 +541,23 @@ describe("cargador", () => {
     expect(procesar).toHaveBeenCalledTimes(1);
   });
 
+  it("carga que falla entera (p. ej. modo prueba): el motivo una sola vez y NO ofrece el otro tipo", async () => {
+    const { say, seawhite } = setup({
+      procesar: async () => resultado([carnet("33919536", "31-10-2026"), carnet("33615450", "31-10-2026"), carnet("AG105UX", "12-03-2027", { tipo: "dominio", apellidoNombre: null })]),
+    });
+    seawhite.cargar = async () => {
+      throw new Error("Modo prueba activo: sólo se puede cargar en clientes de prueba (9999xx); se intentó 0005.");
+    };
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
+    const outs = await say(CARGADOR, "Confirmar carga");
+    const t = texts(outs);
+    expect(t).toMatch(/La carga falló.*0 cargados.*❌ 2 con error: Modo prueba activo/s);
+    expect(t.match(/Modo prueba activo/g)).toHaveLength(1); // una sola vez, no por cada registro
+    expect(t).not.toMatch(/también tiene/); // no ofrece los vehículos: fallarían por lo mismo
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+  });
+
   it("el MISMO archivo de nuevo mientras espera el Confirmar se ignora (sin mensaje)", async () => {
     const { say, procesar, seawhite } = setup();
     await elegirCarga(say, "👤 Choferes");

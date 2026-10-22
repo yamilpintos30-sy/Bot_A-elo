@@ -376,10 +376,10 @@ export class CargadorFlow {
       .catch((err) => this.deps.logger.warn({ err }, "No se pudo cerrar el registro de la carga"));
 
     // Documento mezclado: si quedó el otro tipo sin cargar, se ofrece con un botón
-    // (sin volver a procesar el PDF).
+    // (sin volver a procesar el PDF). Si esta carga falló entera, no: fallaría por lo mismo.
     const cargados = [...(lote.tiposCargados ?? []), lote.tipo];
     const otro = otroTipo(lote.tipo);
-    if (!cargados.includes(otro) && lote.resultado.aceptados.some((c) => c.tipo === otro)) {
+    if (resumen.correctos > 0 && !cargados.includes(otro) && lote.resultado.aceptados.some((c) => c.tipo === otro)) {
       // Sin registro hasta que toque "Cargar ..." (si no lo carga, no queda nada abierto).
       const siguiente: LotePendiente = { ...lote, tipo: otro, tiposCargados: cargados, cargaId: null };
       const loteId = this.deps.lotes.guardar(siguiente);
