@@ -406,7 +406,35 @@ describe("cargador", () => {
     expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
   });
 
-  it("más de 10 clientes: el menú va de a páginas con [➡️ Ver más] y [⬅️ Anteriores]", async () => {
+  it("más de 10 clientes: varias listas seguidas de hasta 10, todas válidas a la vez", async () => {
+    const { say, deps } = setup();
+    const nombre = (n: number) => `Cliente ${String(n).padStart(2, "0")}`;
+    const muchos = Array.from({ length: 25 }, (_, i) => ({
+      codigo: String(i + 1).padStart(4, "0"),
+      nombre: `CLIENTE ${String(i + 1).padStart(2, "0")}`,
+      alias: [],
+      plantas: [{ codigo: "0000", nombre: "OPERADORAS TODAS", alias: [] }],
+    }));
+    deps.catalogo = new MemoryCatalogo(muchos);
+    let outs = await say(CARGADOR, "hola");
+    expect(outs.map((o) => (o.kind === "buttons" ? o.buttons.map((b) => b.title) : []))).toEqual([
+      Array.from({ length: 10 }, (_, i) => nombre(i + 1)),
+      Array.from({ length: 10 }, (_, i) => nombre(i + 11)),
+      Array.from({ length: 5 }, (_, i) => nombre(i + 21)),
+    ]);
+    expect(texts(outs)).toBe(
+      "¡Hola! 👋\n¿Qué *cliente* vas a cargar?\n👇 Están en 3 listas por orden alfabético: tocá el botón de la que corresponda.\n\n📋 Lista 1 de 3: *Cliente 01* a *Cliente 10*" +
+        "\n---\n📋 Lista 2 de 3: *Cliente 11* a *Cliente 20*\n---\n📋 Lista 3 de 3: *Cliente 21* a *Cliente 25*",
+    );
+    // Vale una opción de cualquiera de las listas (la última y la primera).
+    await say(CARGADOR, "Cliente 23");
+    outs = await say(CARGADOR, "✏️ No");
+    await say(CARGADOR, "Cliente 02");
+    outs = await say(CARGADOR, "✅ Sí");
+    expect(texts(outs)).toBe("*CLIENTE 02*\n¿Qué *operadora*?");
+  });
+
+  it("menú viejo con [➡️ Ver más] (sesión guardada): muestra las listas", async () => {
     const { say, deps } = setup();
     const muchos = Array.from({ length: 19 }, (_, i) => ({
       codigo: String(i + 1).padStart(4, "0"),
@@ -415,18 +443,21 @@ describe("cargador", () => {
       plantas: [{ codigo: "0000", nombre: "OPERADORAS TODAS", alias: [] }],
     }));
     deps.catalogo = new MemoryCatalogo(muchos);
-    let outs = await say(CARGADOR, "hola");
-    expect(buttons(outs)).toEqual([...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 1).padStart(2, "0")}`), "➡️ Ver más"]);
-    // Es una lista ("Choose an item", fijo de Chatwoot): se aclara que hay que tocar el botón.
-    expect(texts(outs)).toMatch(/¿Qué \*cliente\* vas a cargar\?\n👇 Tocá el botón de abajo para ver la lista\.$/);
-    outs = await say(CARGADOR, "➡️ Ver más");
-    expect(buttons(outs)).toEqual(["⬅️ Anteriores", ...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 9).padStart(2, "0")}`), "➡️ Ver más"]);
-    outs = await say(CARGADOR, "➡️ Ver más");
-    expect(buttons(outs)).toEqual(["⬅️ Anteriores", "Cliente 17", "Cliente 18", "Cliente 19"]);
-    await say(CARGADOR, "Cliente 18");
-    outs = await say(CARGADOR, "✅ Sí");
-    expect(texts(outs)).toBe("*CLIENTE 18*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["OPERADORAS TODAS"]);
+    await say(CARGADOR, "hola");
+    const outs = await say(CARGADOR, "cpag:1");
+    expect(outs).toHaveLength(2);
+    expect(buttons(outs)).toHaveLength(19);
+    expect(buttons(outs)).not.toContain("➡️ Ver más");
+  });
+
+  it("con 4 a 10 clientes: una sola lista, con la aclaración de tocar el botón", async () => {
+    const { say, deps } = setup();
+    deps.catalogo = new MemoryCatalogo(
+      Array.from({ length: 5 }, (_, i) => ({ codigo: String(i + 1).padStart(4, "0"), nombre: `CLIENTE ${i + 1}`, alias: [], plantas: [{ codigo: "0000", nombre: "OPERADORAS TODAS", alias: [] }] })),
+    );
+    const outs = await say(CARGADOR, "hola");
+    expect(outs).toHaveLength(1);
+    expect(texts(outs)).toBe("¡Hola! 👋\n¿Qué *cliente* vas a cargar?\n👇 Tocá el botón de abajo para ver la lista.");
   });
 
   it("códigos de 4 dígitos (0001 / 0000) llegan tal cual a SEA WHITE", async () => {

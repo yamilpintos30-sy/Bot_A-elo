@@ -40,7 +40,6 @@ function nombreParaBoton(c: Cliente): string {
 }
 /** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
 const MAX_OPCIONES = 10;
-const POR_PAGINA = 8;
 
 /** Títulos de botón únicos (si dos nombres se cortan igual, se les antepone el código). */
 function titulos<T extends { codigo: string; nombre: string }>(items: T[], nombre: (i: T) => string): ButtonSpec[] {
@@ -93,9 +92,10 @@ export class CargadorFlow {
     // [Menú 😊] / [🔄 Otro cliente]: de cero, desde el cliente.
     if (payload === "menu" || payload === "otrocliente") {
       session.cargador = { etapa: "esperando_datos" };
-      return this.menuClientes(clientes, 0, emit, false);
+      return this.menuClientes(clientes, emit, false);
     }
-    if (payload?.startsWith("cpag:")) return this.menuClientes(clientes, Number(payload.slice(5)) || 0, emit, false);
+    // "cpag:" era el [Ver más] de las páginas viejas (sesiones guardadas): muestra las listas.
+    if (payload?.startsWith("cpag:")) return this.menuClientes(clientes, emit, false);
 
     // Adjuntos: PDF o fotos de carnets (varias fotos juntas se unen en un solo PDF).
     // Se guardan aunque todavía falte elegir algo.
@@ -117,7 +117,7 @@ export class CargadorFlow {
     } else if (payload === "clino") {
       // Eligió mal: de nuevo la lista de clientes.
       session.cargador = { etapa: "esperando_datos", archivos: st.archivos };
-      return this.menuClientes(clientes, 0, emit, false);
+      return this.menuClientes(clientes, emit, false);
     } else if (payload?.startsWith("pla:")) {
       st.plantaCodigo = payload.slice(4);
       st.tipo = undefined;
@@ -135,7 +135,7 @@ export class CargadorFlow {
     // 1) Cliente.
     if (!cliente) {
       st.clienteCodigo = undefined;
-      return this.menuClientes(clientes, 0, emit, nuevo);
+      return this.menuClientes(clientes, emit, nuevo);
     }
     // 1b) Confirmar el cliente elegido ("Elegiste X. ¿Es correcto?").
     if (!planta && !st.clienteConfirmado) return emit({ kind: "buttons", text: CARGA.confirmarCliente(cliente.nombre), buttons: [CLIENTE_SI, CLIENTE_NO] });
@@ -152,21 +152,22 @@ export class CargadorFlow {
     return this.procesar(session, st, destino, emit);
   }
 
-  /** Menú de clientes: todos si entran; si no, de a páginas con [⬅️ Anteriores] [➡️ Ver más]. */
-  private menuClientes(clientes: Cliente[], pagina: number, emit: Emit, hola: boolean): Promise<void> {
+  /**
+   * Menú de clientes (por orden alfabético). Si entran en una lista (10), uno solo.
+   * Si no, varias listas seguidas de hasta 10, todas válidas a la vez (el motor
+   * acumula los botones de toda la respuesta): sin [Ver más] ni páginas.
+   */
+  private async menuClientes(clientes: Cliente[], emit: Emit, hola: boolean): Promise<void> {
     const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
-    let botones = opciones;
-    if (opciones.length > MAX_OPCIONES) {
-      const paginas = Math.ceil(opciones.length / POR_PAGINA);
-      const p = Math.min(Math.max(pagina, 0), paginas - 1);
-      botones = [
-        ...(p > 0 ? [{ title: "⬅️ Anteriores", payload: `cpag:${p - 1}` }] : []),
-        ...opciones.slice(p * POR_PAGINA, (p + 1) * POR_PAGINA),
-        ...(p < paginas - 1 ? [{ title: "➡️ Ver más", payload: `cpag:${p + 1}` }] : []),
-      ];
+    if (!opciones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
+    if (opciones.length <= MAX_OPCIONES) return emit({ kind: "buttons", text: CARGA.elegirCliente(hola, opciones.length > 3), buttons: opciones });
+
+    const tandas: ButtonSpec[][] = [];
+    for (let i = 0; i < opciones.length; i += MAX_OPCIONES) tandas.push(opciones.slice(i, i + MAX_OPCIONES));
+    for (const [i, tanda] of tandas.entries()) {
+      const rango = CARGA.listaClientes(i + 1, tandas.length, tanda[0]!.title, tanda.at(-1)!.title);
+      await emit({ kind: "buttons", text: i === 0 ? `${CARGA.elegirClienteVarias(hola, tandas.length)}\n\n${rango}` : rango, buttons: tanda });
     }
-    if (!botones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
-    return emit({ kind: "buttons", text: CARGA.elegirCliente(hola, botones.length > 3), buttons: botones });
   }
 
   /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
@@ -291,7 +292,7 @@ export class CargadorFlow {
       if (payload === "menu" || payload === "cancelar") {
         this.deps.lotes.borrar(st.loteId);
         session.cargador = { etapa: "esperando_datos" };
-        return this.menuClientes(await this.deps.catalogo.listar(), 0, emit, false);
+        return this.menuClientes(await this.deps.catalogo.listar(), emit, false);
       }
       return this.ofrecerOtro(lote, emit);
     }

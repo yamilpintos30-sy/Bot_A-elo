@@ -96,6 +96,10 @@ export const CARGA = {
    */
   elegirCliente: (hola: boolean, lista = false) =>
     `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?${lista ? "\n👇 Tocá el botón de abajo para ver la lista." : ""}`,
+  /** Muchos clientes: van en varias listas seguidas, por orden alfabético. */
+  elegirClienteVarias: (hola: boolean, listas: number) =>
+    `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?\n👇 Están en ${listas} listas por orden alfabético: tocá el botón de la que corresponda.`,
+  listaClientes: (n: number, total: number, desde: string, hasta: string) => `📋 Lista ${n} de ${total}: *${desde}* a *${hasta}*`,
   /** Paso 2: operadora (subcliente) del cliente elegido. */
   elegirOperadora: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
   /** Después de elegir el cliente: se confirma antes de pasar a la operadora. */
