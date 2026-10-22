@@ -301,6 +301,8 @@ export class CargadorFlow {
     const repetido = msg && !msg.text.trim() && msg.attachments.length > 0 && msg.attachments.every((a) => nombreArchivo(a) === lote.archivo);
     if (repetido) {
       this.deps.logger.info({ archivo: lote.archivo }, "Mismo archivo mientras espera la confirmación: se ignora");
+      // Los botones del resumen siguen en pantalla: tienen que seguir reconociéndose.
+      session.botones = [CONFIRMAR, CANCELAR];
       return;
     }
     return emit({ kind: "buttons", text: CARGA.pendiente, buttons: [CONFIRMAR, CANCELAR] });
