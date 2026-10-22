@@ -26,7 +26,11 @@ import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Se
 
 const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
 /** Después de una carga: más del mismo cliente y operadora, cambiar de cliente, o terminar. */
-const MENU_OTRA: ButtonSpec[] = [MENU_TIPO[0]!, MENU_TIPO[1]!, { title: "🔄 Cambiar cliente", payload: "otrocliente" }, BOTON_FIN];
+const CAMBIAR_CLIENTE: ButtonSpec = { title: "🔄 Cambiar cliente", payload: "otrocliente" };
+/** "Elegiste X. ¿Es correcto?" después de elegir el cliente. */
+const CLIENTE_SI: ButtonSpec = { title: "✅ Sí", payload: "clisi" };
+const CLIENTE_NO: ButtonSpec = { title: "✏️ No", payload: "clino" };
+const MENU_OTRA: ButtonSpec[] = [MENU_TIPO[0]!, MENU_TIPO[1]!, CAMBIAR_CLIENTE, BOTON_FIN];
 /** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
 const MAX_OPCIONES = 10;
 const POR_PAGINA = 8;
@@ -97,9 +101,16 @@ export class CargadorFlow {
     if (payload?.startsWith("cli:")) {
       if (clientes.some((c) => c.codigo === payload.slice(4))) {
         st.clienteCodigo = payload.slice(4);
+        st.clienteConfirmado = false;
         st.plantaCodigo = undefined;
         st.tipo = undefined;
       }
+    } else if (payload === "clisi" && st.clienteCodigo) {
+      st.clienteConfirmado = true;
+    } else if (payload === "clino") {
+      // Eligió mal: de nuevo la lista de clientes.
+      session.cargador = { etapa: "esperando_datos", archivos: st.archivos };
+      return this.menuClientes(clientes, 0, emit, false);
     } else if (payload?.startsWith("pla:")) {
       st.plantaCodigo = payload.slice(4);
       st.tipo = undefined;
@@ -119,6 +130,8 @@ export class CargadorFlow {
       st.clienteCodigo = undefined;
       return this.menuClientes(clientes, 0, emit, nuevo);
     }
+    // 1b) Confirmar el cliente elegido ("Elegiste X. ¿Es correcto?").
+    if (!planta && !st.clienteConfirmado) return emit({ kind: "buttons", text: CARGA.confirmarCliente(cliente.nombre), buttons: [CLIENTE_SI, CLIENTE_NO] });
     // 2) Operadora.
     if (!planta) {
       st.plantaCodigo = undefined;

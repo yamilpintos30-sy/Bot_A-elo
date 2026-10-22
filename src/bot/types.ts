@@ -61,6 +61,8 @@ export interface CargadorState {
   cargaId?: number | null;
   /** Ya se cargó un tipo y se ofrece cargar el otro tipo del mismo documento. */
   ofreciendoOtro?: boolean;
+  /** El cliente elegido del menú ya se confirmó con [Sí] (hasta eso no se pasa a la operadora). */
+  clienteConfirmado?: boolean;
   /** "¿Quisiste decir ...?" pendiente (cliente y subcliente). */
   sugerencia?: { clienteCodigo: string; plantaCodigo?: string };
   pidioPlanta?: boolean;

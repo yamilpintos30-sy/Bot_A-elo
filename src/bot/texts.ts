@@ -90,6 +90,8 @@ export const CARGA = {
   elegirCliente: (hola: boolean) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?`,
   /** Paso 2: operadora (subcliente) del cliente elegido. */
   elegirOperadora: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
+  /** Después de elegir el cliente: se confirma antes de pasar a la operadora. */
+  confirmarCliente: (cliente: string) => `Elegiste *${cliente}*. ¿Es correcto?`,
   /** Paso 3: tipo de documentación. */
   elegirTipo: (destino: string) => `*${destino}*\n¿Qué documentación vas a cargar?`,
   menu: "¿Qué documentación vas a cargar?",

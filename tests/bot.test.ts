@@ -209,6 +209,7 @@ describe("reconocimiento de cliente y planta", () => {
 async function elegirCarga(say: Awaited<ReturnType<typeof setup>>["say"], tipo: string, cliente = "Total Austral", operadora = "Planta 1") {
   await say(CARGADOR, "Menú 😊");
   await say(CARGADOR, cliente);
+  await say(CARGADOR, "✅ Sí"); // "Elegiste X. ¿Es correcto?"
   await say(CARGADOR, operadora);
   return say(CARGADOR, tipo);
 }
@@ -229,6 +230,10 @@ describe("cargador", () => {
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
 
     outs = await say(CARGADOR, "Total Austral");
+    expect(texts(outs)).toBe("Elegiste *TOTAL AUSTRAL*. ¿Es correcto?");
+    expect(buttons(outs)).toEqual(["✅ Sí", "✏️ No"]);
+
+    outs = await say(CARGADOR, "✅ Sí");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
     expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
 
@@ -303,6 +308,7 @@ describe("cargador", () => {
     expect(texts(outs)).toBe("¿Qué *cliente* vas a cargar?");
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
     await say(CARGADOR, "Vista Energy");
+    await say(CARGADOR, "✅ Sí");
     await say(CARGADOR, "Planta 1");
     outs = await say(CARGADOR, "🚛 Dominios");
     expect(texts(outs)).toMatch(/\*VISTA ENERGY – Planta 1\* – dominios/);
@@ -312,10 +318,29 @@ describe("cargador", () => {
     expect(seawhite.cargas.map((c) => c.registros[0]!.cliente)).toEqual(["999991", "999992"]);
   });
 
+  it("después de elegir el cliente se confirma: con [No] vuelve la lista de clientes", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "hola");
+    let outs = await say(CARGADOR, "Vista Energy");
+    expect(texts(outs)).toBe("Elegiste *VISTA ENERGY*. ¿Es correcto?");
+    outs = await say(CARGADOR, "✏️ No");
+    expect(texts(outs)).toBe("¿Qué *cliente* vas a cargar?");
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+    await say(CARGADOR, "Total Austral");
+    outs = await say(CARGADOR, "✅ Sí");
+    expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
+    // Escribir otra cosa en vez de contestar repite la pregunta.
+    await say(CARGADOR, "Menú 😊");
+    await say(CARGADOR, "Vista Energy");
+    outs = await say(CARGADOR, "eh?");
+    expect(texts(outs)).toBe("Elegiste *VISTA ENERGY*. ¿Es correcto?");
+  });
+
   it("cliente con una sola operadora: igual se elige del menú", async () => {
     const { say } = setup();
     await say(CARGADOR, "hola");
-    const outs = await say(CARGADOR, "Vista Energy");
+    await say(CARGADOR, "Vista Energy");
+    const outs = await say(CARGADOR, "✅ Sí");
     expect(texts(outs)).toBe("*VISTA ENERGY*\n¿Qué *operadora*?");
     expect(buttons(outs)).toEqual(["Planta 1"]);
   });
@@ -334,6 +359,7 @@ describe("cargador", () => {
     expect(texts(outs)).toMatch(/Guardé el archivo\. Primero elegí cliente, operadora y qué documentación es/);
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
     await say(CARGADOR, "Total Austral");
+    await say(CARGADOR, "✅ Sí");
     await say(CARGADOR, "Planta 1");
     expect(procesar).not.toHaveBeenCalled();
     outs = await say(CARGADOR, "👤 Choferes");
@@ -356,7 +382,8 @@ describe("cargador", () => {
     expect(buttons(outs)).toEqual(["⬅️ Anteriores", ...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 9).padStart(2, "0")}`), "➡️ Ver más"]);
     outs = await say(CARGADOR, "➡️ Ver más");
     expect(buttons(outs)).toEqual(["⬅️ Anteriores", "Cliente 17", "Cliente 18", "Cliente 19"]);
-    outs = await say(CARGADOR, "Cliente 18");
+    await say(CARGADOR, "Cliente 18");
+    outs = await say(CARGADOR, "✅ Sí");
     expect(texts(outs)).toBe("*CLIENTE 18*\n¿Qué *operadora*?");
     expect(buttons(outs)).toEqual(["OPERADORAS TODAS"]);
   });
