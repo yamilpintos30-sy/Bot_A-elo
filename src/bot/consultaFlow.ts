@@ -63,6 +63,11 @@ const MENU_INDIVIDUAL: ButtonSpec[] = [
 ];
 const MENU_GRUPAL: ButtonSpec[] = [{ title: "👤 Choferes", payload: "g:chofer" }, { title: "🚛 Dominios", payload: "g:dominio" }, BOTON_MENU];
 const FIN_LISTADO: ButtonSpec[] = [BOTON_MENU, { title: "📋 Otro listado", payload: "r:grupal" }, BOTON_FIN];
+/**
+ * Logística no recibe el carnet (pedido de Yamil, 22-oct-2026): ve la habilitación y
+ * sigue. Queda desactivado, no borrado: con `true` vuelve a ofrecerse [📄 Sí, pasámelo].
+ */
+const LOGISTICA_OFRECE_CARNET = false;
 /** Búsqueda por nombre: con más resultados se pide algo más preciso. */
 const MAX_ENCONTRADOS = 30;
 
@@ -470,7 +475,11 @@ export class ConsultaFlow {
     const texto = respuestaConsulta({ tipo, identificador, nombre, plantas: linea ? [linea] : [], sinCredencialEn: linea ? undefined : destino, hoy });
     const otroCliente = (st.habilitados?.length ?? 0) > 1 ? [BOTON_OTRO_CLIENTE] : [];
 
-    if (seawhiteId === null) return emit({ kind: "buttons", text: `${texto}\n\n${this.textoAlgoMas(st)}`, buttons: otroCliente.length ? [BOTON_MENU, BOTON_CONSULTA, ...otroCliente] : FIN_CONSULTA });
+    // Sin carnet (o logística, que no lo ofrece): resultado y "¿algo más?" en un mensaje.
+    const ofreceCarnet = st.perfil !== "logistica" || LOGISTICA_OFRECE_CARNET;
+    if (seawhiteId === null || !ofreceCarnet) {
+      return emit({ kind: "buttons", text: `${texto}\n\n${this.textoAlgoMas(st)}`, buttons: otroCliente.length ? [BOTON_MENU, BOTON_CONSULTA, ...otroCliente] : FIN_CONSULTA });
+    }
     st.ultimos = [{ tipo, identificador, clienteCodigo, plantaCodigo: plantaCodigo!, etiqueta: destino, seawhiteId }];
     // Resultado y pregunta en UN mensaje: separados, WhatsApp a veces entregaba la pregunta primero.
     return emit({

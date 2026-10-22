@@ -1102,9 +1102,14 @@ describe("logística", () => {
     outs = await L(say, "33615617");
     expect(buttons(outs)).toEqual(["Total Austral"]);
     outs = await L(say, "Total Austral");
-    expect(texts(outs)).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026/);
-    outs = await L(say, "No, gracias");
-    expect(texts(outs)).toMatch(/Otra habilitación\*: otro DNI, nombre o dominio[\s\S]*consultas individuales o grupales/);
+    // Logística no recibe el carnet: habilitación y "¿algo más?" en un mensaje.
+    expect(outs).toHaveLength(1);
+    expect(texts(outs)).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026[\s\S]*\n\n¿Necesitás algo más\?\n🔎 \*Otra habilitación\*: otro DNI, nombre o dominio[\s\S]*consultas individuales o grupales/);
+    expect(texts(outs)).not.toMatch(/carnet/i);
+    expect(buttons(outs)).toEqual(["🏠 Menú principal", "🔎 Otra habilitación", "Eso es todo, gracias"]);
+    // Aunque escriba el botón del carnet, no se manda.
+    outs = await L(say, "📄 Sí, pasámelo");
+    expect(outs.some((o) => o.kind === "file")).toBe(false);
   });
 
   it("Por nombre: homónimos con el DNI debajo; al elegir sigue como por DNI", async () => {
