@@ -1080,11 +1080,12 @@ describe("logística", () => {
   const FIN_LISTADO = ["🏠 Menú principal", "📋 Otro listado", "Eso es todo, gracias"];
   const L = (say: Awaited<ReturnType<typeof setup>>["say"], text: string) => say(LOGISTICA_TEL, text, [], "c-log");
 
-  it("saluda con su propio menú: Individual / Grupal (sin VTV y seguro)", async () => {
+  it("como la carga: sin foto, '¡Hola! 👋' y directo a su menú (sin VTV y seguro)", async () => {
     const { say } = setup();
     let outs = await L(say, "hola");
-    expect(outs[0]!.kind).toBe("image");
-    expect(texts(outs)).toMatch(/Individual\*: un chofer o un vehículo, por DNI, nombre o dominio[\s\S]*Grupal\*: el listado en PDF/);
+    expect(outs).toHaveLength(1);
+    expect(outs[0]!.kind).toBe("buttons");
+    expect(texts(outs)).toMatch(/^¡Hola! 👋\n¿Qué tipo de consulta querés hacer\?\n🔎 \*Individual\*: un chofer o un vehículo, por DNI, nombre o dominio[\s\S]*Grupal\*: el listado en PDF/);
     expect(buttons(outs)).toEqual(MENU_LOG);
     outs = await L(say, "vtv");
     expect(buttons(outs)).toEqual(MENU_LOG); // VTV y seguro no es de logística

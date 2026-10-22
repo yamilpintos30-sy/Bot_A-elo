@@ -129,18 +129,23 @@ export class ConsultaFlow {
     if (session.consulta && (session.consulta.perfil ?? "chofer") !== perfil) session.consulta = { saludado: session.consulta.saludado, perfil };
     const st: ConsultaState = (session.consulta ??= { saludado: false, perfil });
     st.perfil = perfil;
+    // Logística, como la carga: sin foto, "¡Hola! 👋" en el primer menú y directo a las preguntas.
+    let hola = false;
     if (!st.saludado) {
       st.saludado = true;
-      // Como Enri: foto del bot con el saludo (por el nombre si el teléfono está
-      // en SEA WHITE). El canal espera la ENTREGA de la imagen antes de seguir.
-      const nombre = await this.nombreDelContacto(session.phone);
-      await emit({ kind: "image", caption: CONSULTA.saludo(this.deps.botName, nombre) });
+      if (perfil === "logistica") hola = true;
+      else {
+        // Choferes, como Enri: foto del bot con el saludo (por el nombre si el teléfono
+        // está en SEA WHITE). El canal espera la ENTREGA de la imagen antes de seguir.
+        const nombre = await this.nombreDelContacto(session.phone);
+        await emit({ kind: "image", caption: CONSULTA.saludo(this.deps.botName, nombre) });
+      }
     }
 
     // --- Botones y comandos ---
     if (payload === "menu") {
       session.consulta = { saludado: true, perfil };
-      return this.menuPrincipal(perfil, emit);
+      return this.menuPrincipal(perfil, emit, hola);
     }
     if (payload === "consulta") {
       // Otro DNI o dominio (o nombre): vuelve a elegir cómo buscar.
@@ -167,7 +172,7 @@ export class ConsultaFlow {
     if (opcion && permitida(opcion, perfil)) return this.ir(st, opcion, emit);
 
     // --- Menú principal: hasta elegir una rama no se toma nada más ---
-    if (!st.rama) return this.menuPrincipal(perfil, emit);
+    if (!st.rama) return this.menuPrincipal(perfil, emit, hola);
 
     // --- Rama VTV y seguro ---
     if (st.rama === "vehiculo") {
@@ -200,8 +205,8 @@ export class ConsultaFlow {
 
   // --- Menú y elección -----------------------------------------------------------
 
-  private menuPrincipal(perfil: Perfil, emit: Emit): Promise<void> {
-    if (perfil === "logistica") return emit({ kind: "buttons", text: CONSULTA.menuLogistica, buttons: MENU_LOGISTICA });
+  private menuPrincipal(perfil: Perfil, emit: Emit, hola = false): Promise<void> {
+    if (perfil === "logistica") return emit({ kind: "buttons", text: `${hola ? "¡Hola! 👋\n" : ""}${CONSULTA.menuLogistica}`, buttons: MENU_LOGISTICA });
     return emit({ kind: "buttons", text: CONSULTA.menuPrincipal, buttons: MENU_PRINCIPAL });
   }
 
