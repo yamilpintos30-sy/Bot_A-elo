@@ -417,6 +417,8 @@ describe("cargador", () => {
     deps.catalogo = new MemoryCatalogo(muchos);
     let outs = await say(CARGADOR, "hola");
     expect(buttons(outs)).toEqual([...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 1).padStart(2, "0")}`), "➡️ Ver más"]);
+    // Es una lista ("Choose an item", fijo de Chatwoot): se aclara que hay que tocar el botón.
+    expect(texts(outs)).toMatch(/¿Qué \*cliente\* vas a cargar\?\n👇 Tocá el botón de abajo para ver la lista\.$/);
     outs = await say(CARGADOR, "➡️ Ver más");
     expect(buttons(outs)).toEqual(["⬅️ Anteriores", ...Array.from({ length: 8 }, (_, i) => `Cliente ${String(i + 9).padStart(2, "0")}`), "➡️ Ver más"]);
     outs = await say(CARGADOR, "➡️ Ver más");

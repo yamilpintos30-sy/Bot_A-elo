@@ -90,7 +90,12 @@ export const DESTINO = {
 
 export const CARGA = {
   /** Paso 1: cliente (menú, de la tabla de clientes). */
-  elegirCliente: (hola: boolean) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?`,
+  /**
+   * `lista`: con más de 3 opciones WhatsApp muestra un botón "Choose an item" (texto
+   * fijo de Chatwoot, no se puede cambiar): se aclara que hay que tocarlo.
+   */
+  elegirCliente: (hola: boolean, lista = false) =>
+    `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?${lista ? "\n👇 Tocá el botón de abajo para ver la lista." : ""}`,
   /** Paso 2: operadora (subcliente) del cliente elegido. */
   elegirOperadora: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
   /** Después de elegir el cliente: se confirma antes de pasar a la operadora. */

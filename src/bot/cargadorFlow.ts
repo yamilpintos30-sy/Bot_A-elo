@@ -166,7 +166,7 @@ export class CargadorFlow {
       ];
     }
     if (!botones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
-    return emit({ kind: "buttons", text: CARGA.elegirCliente(hola), buttons: botones });
+    return emit({ kind: "buttons", text: CARGA.elegirCliente(hola, botones.length > 3), buttons: botones });
   }
 
   /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
