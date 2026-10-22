@@ -804,7 +804,7 @@ describe("chofer", () => {
 
     outs = await say(CHOFER, "33.615.617");
     expect(texts(outs)).toMatch(/Buscando dónde está habilitado el DNI \*33615617\*/);
-    expect(texts(outs)).toMatch(/👤 DNI \*33615617\*: habilitado en \*1\* cliente\.\n¿Cuál querés ver\?/);
+    expect(texts(outs)).toMatch(/👤 DNI \*33615617\*: habilitado en \*1\* cliente\.\nℹ️ Si no ves el cliente que necesitás, es porque ahí \*NO está habilitado\*\.\n¿Cuál querés ver\?/);
     expect(buttons(outs)).toEqual(["Total Austral"]);
 
     // Una sola operadora: no se pregunta, va directo a la habilitación.
@@ -927,7 +927,7 @@ describe("chofer", () => {
     const outs = await say(CHOFER, "33615617");
     const listas = outs.filter((o) => o.kind === "buttons") as Array<Extract<Outbound, { kind: "buttons" }>>;
     expect(listas.map((l) => l.buttons.length)).toEqual([10, 2]);
-    expect(listas[0]!.text).toMatch(/habilitado en \*12\* clientes\.\n¿Cuál querés ver\?\n👇 Están en 2 listas/);
+    expect(listas[0]!.text).toMatch(/habilitado en \*12\* clientes\.\nℹ️ .*NO está habilitado.*\n¿Cuál querés ver\?\n👇 Están en 2 listas/);
     expect(listas[1]!.text).toBe("📋 Lista 2 de 2: *Cliente 11* a *Cliente 12*");
   });
 

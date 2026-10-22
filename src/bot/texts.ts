@@ -219,7 +219,8 @@ export const CONSULTA = {
     `❌ No encontré habilitaciones vigentes para ${tipo === "chofer" ? "el DNI" : "el dominio"} *${id}*.\nRevisá ${tipo === "chofer" ? "el número" : "la patente"} y escribil${tipo === "chofer" ? "o" : "a"} de nuevo.`,
   /** Clientes donde está habilitado: se elige uno (botones, lista o varias listas). */
   elegirClienteHabilitado: (tipo: "chofer" | "dominio", id: string, cantidad: number) =>
-    `${tipo === "chofer" ? "👤 DNI" : "🚛 Dominio"} *${id}*: habilitado en *${cantidad}* cliente${cantidad === 1 ? "" : "s"}.\n¿Cuál querés ver?`,
+    `${tipo === "chofer" ? "👤 DNI" : "🚛 Dominio"} *${id}*: habilitado en *${cantidad}* cliente${cantidad === 1 ? "" : "s"}.\n` +
+    `ℹ️ Si no ves el cliente que necesitás, es porque ahí *NO está habilitado*.\n¿Cuál querés ver?`,
   elegirOperadoraHabilitada: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
   consultaNoDisponible: "No pude consultar las habilitaciones en este momento. Probá de nuevo en unos minutos.",
   pedirPatenteDoc: (doc: "vtv" | "seguro") => `🚛 Pasame la *patente* (dominio) del vehículo y te mando ${doc === "vtv" ? "la *VTV*" : "el *seguro*"}. Ejemplo: AA123BB`,
