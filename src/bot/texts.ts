@@ -94,7 +94,7 @@ export const CARGA = {
   /** Paso 3: tipo de documentación. */
   elegirTipo: (destino: string) => `*${destino}*\n¿Qué documentación vas a cargar?`,
   menu: "¿Qué documentación vas a cargar?",
-  otraCarga: "¿Querés cargar más documentación de este cliente, o cambiar de cliente?",
+  otraCarga: (cliente?: string) => `¿Querés cargar más documentación de ${cliente ? `*${cliente}*` : "este cliente"}, o cambiar de cliente?`,
   /** Mensaje aparte, debajo del menú de después de una carga (los botones de arriba siguen valiendo). */
   oCerrar: "O si no, podés cerrar la sesión.",
   /** Mandó el archivo antes de terminar de elegir: se guarda y se sigue con lo que falta. */
@@ -197,6 +197,9 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
 
 // --- Choferes --------------------------------------------------------------------
 
+/** "…Ejemplo: 30123456" -> "…Ejemplo: 30123456." (sin duplicar el punto). */
+const conPunto = (t: string) => (/[.!?]$/.test(t.trim()) ? t.trim() : `${t.trim()}.`);
+
 export const CONSULTA = {
   /** Mismo saludo que Enri (con el nombre si se identificó el teléfono). */
   saludo: (bot: string, nombre?: string | null) =>
@@ -220,7 +223,7 @@ export const CONSULTA = {
   /** Clientes donde está habilitado: se elige uno (botones, lista o varias listas). */
   elegirClienteHabilitado: (tipo: "chofer" | "dominio", id: string, cantidad: number) =>
     `${tipo === "chofer" ? "👤 DNI" : "🚛 Dominio"} *${id}*: habilitado en *${cantidad}* cliente${cantidad === 1 ? "" : "s"}.\n` +
-    `ℹ️ Si no ves el cliente que necesitás, es porque ahí *NO está habilitado*.\n¿Cuál querés ver?`,
+    `ℹ️ Si no ves el cliente, es porque *NO estás habilitado*.\n¿Cuál querés ver?`,
   elegirOperadoraHabilitada: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
   consultaNoDisponible: "No pude consultar las habilitaciones en este momento. Probá de nuevo en unos minutos.",
   pedirPatenteDoc: (doc: "vtv" | "seguro") => `🚛 Pasame la *patente* (dominio) del vehículo y te mando ${doc === "vtv" ? "la *VTV*" : "el *seguro*"}. Ejemplo: AA123BB`,
@@ -233,8 +236,9 @@ export const CONSULTA = {
   /** El resguardo no lo validó: no se entrega (y queda como falla crítica en el panel). */
   docNoVerificado: (doc: "vtv" | "seguro", dominio: string) => `Por el momento no tengo disponible ${doc === "vtv" ? "la VTV" : "el seguro"} de *${dominio}*.`,
   ofrecerOtro: (otro: "vtv" | "seguro", dominio: string) => `¿Querés también ${otro === "vtv" ? "la *VTV*" : "el *seguro*"} de *${dominio}*?`,
-  dniInvalido: (error: string) => `❌ ${error}`,
-  patenteInvalida: (error: string) => `❌ ${error}`,
+  /** Error de formato: se aclara que vuelva a intentarlo (sigue esperando el dato). */
+  dniInvalido: (error: string) => `❌ ${conPunto(error)} Reintentá.`,
+  patenteInvalida: (error: string) => `❌ ${conPunto(error)} Reintentá.`,
   sinArchivos: "📵 En este número no se reciben archivos: es solo para consultas de vencimientos.",
   preguntaCarnet: "¿Querés que te pase el carnet?",
   /** Momento oportuno para aclarar cómo seguir. */

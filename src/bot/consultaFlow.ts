@@ -6,7 +6,7 @@
  *   🪪 Habilitación -> [Por DNI] [Por dominio] [Menú]
  *        -> DNI o patente
  *        -> clientes donde está habilitado (API 1 / 7 de SEA WHITE) -> elige uno
- *        -> su operadora (API 2 / 8): si hay una sola, directo; si no, se elige
+ *        -> su operadora (API 2 / 8), del menú aunque haya una sola
  *        -> habilitación y vencimiento -> ¿carnet? -> PDF
  *        al terminar: [🏠 Menú principal] vuelve al inicio, [🔎 Otra habilitación] otro DNI o dominio,
  *        [Eso es todo]. Con varios clientes, también [🏢 Otro cliente].
@@ -335,13 +335,11 @@ export class ConsultaFlow {
     const opciones = titulos(lista, (c) => nombreCompleto(c.nombre) || c.nombre || c.codigo).map((b, i) => ({
       ...b,
       payload: `hn:${lista[i]!.codigo}`,
-      description: `DNI ${lista[i]!.codigo}`,
+      // El DNI siempre; si el nombre no entró en la opción, también el completo.
+      description: `DNI ${lista[i]!.codigo}${b.description ? ` · ${b.description}` : ""}`.slice(0, 72),
     }));
     const encabezado = CONSULTA.elegirEncontrado(lista.length, buscado);
-    return emitirMenu(emit, opciones, {
-      una: (esLista) => (esLista ? `${encabezado}\n${aclaracionLista}` : encabezado),
-      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
-    });
+    return this.menu(emit, opciones, encabezado, "choferes");
   }
 
   /** Eligió a uno de los encontrados: sigue como si hubiera escrito su DNI. */
@@ -379,15 +377,12 @@ export class ConsultaFlow {
     st.subclientes = undefined;
     st.plantaCodigo = undefined;
     st.plantaNombre = undefined;
-    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `hc:${clientes[i]!.codigo}` }));
+    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `hc:${clientes[i]!.codigo}` }));
     const encabezado = CONSULTA.elegirClienteHabilitado(tipo, st.identificador, clientes.length);
-    return emitirMenu(emit, opciones, {
-      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
-      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
-    });
+    return this.menu(emit, opciones, encabezado, "clientes");
   }
 
-  /** Eligió el cliente -> sus operadoras (API 2 / 8). Con una sola, se consulta directo. */
+  /** Eligió el cliente -> sus operadoras (API 2 / 8), para elegir del menú. */
   private async elegirCliente(st: ConsultaState, codigo: string, emit: Emit): Promise<void> {
     const cliente = st.habilitados?.find((c) => c.codigo === codigo);
     const tipo = st.modo === "dominio" ? "dominio" : "chofer";
@@ -401,7 +396,7 @@ export class ConsultaFlow {
       this.deps.logger.warn({ err }, "SEA WHITE no respondió los subclientes habilitados");
       return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${this.textoAlgoMas(st)}`, FIN_CONSULTA);
     }
-    if (subclientes.length === 1) return this.elegirOperadora(st, subclientes[0]!.codigo, emit, subclientes);
+    // La operadora se elige del menú aunque haya una sola (como en la carga).
     if (!subclientes.length) {
       // No debería pasar (la API 1/7 lo listó en este cliente): se informa sin credencial.
       return this.consultar(st, tipo, st.identificador, cliente.codigo, null, emit);
@@ -414,10 +409,7 @@ export class ConsultaFlow {
     const subs = st.subclientes ?? [];
     const opciones = titulos(subs, (s) => s.nombre).map((b, i) => ({ ...b, payload: `hs:${subs[i]!.codigo}` }));
     const encabezado = CONSULTA.elegirOperadoraHabilitada(st.clienteNombre ?? "");
-    return emitirMenu(emit, opciones, {
-      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
-      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
-    });
+    return this.menu(emit, opciones, encabezado, "operadoras");
   }
 
   private elegirOperadora(st: ConsultaState, codigo: string, emit: Emit, lista = st.subclientes): Promise<void> {
@@ -548,12 +540,9 @@ export class ConsultaFlow {
 
   private menuClientesListado(st: ConsultaState, emit: Emit): Promise<void> {
     const clientes = st.listado?.clientes ?? [];
-    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `gc:${clientes[i]!.codigo}` }));
+    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `gc:${clientes[i]!.codigo}` }));
     const encabezado = CONSULTA.listadoElegirCliente(this.tipoListado(st));
-    return emitirMenu(emit, opciones, {
-      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
-      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
-    });
+    return this.menu(emit, opciones, encabezado, "clientes");
   }
 
   /** Eligió el cliente -> operadoras con vigentes (API 4 / 10). Con una sola, directo al PDF. */
@@ -578,10 +567,7 @@ export class ConsultaFlow {
     const subs = st.listado?.subclientes ?? [];
     const opciones = titulos(subs, (s) => s.nombre).map((b, i) => ({ ...b, payload: `gs:${subs[i]!.codigo}` }));
     const encabezado = CONSULTA.elegirOperadoraHabilitada(st.listado?.cliente?.nombre ?? "");
-    return emitirMenu(emit, opciones, {
-      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
-      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
-    });
+    return this.menu(emit, opciones, encabezado, "operadoras");
   }
 
   private elegirSubclienteListado(st: ConsultaState, codigo: string, emit: Emit): Promise<void> {
@@ -678,6 +664,15 @@ export class ConsultaFlow {
       await emit({ kind: "text", text: CONSULTA.docNoDisponible, sinPie: true });
       return "no_disponible";
     }
+  }
+
+  /** Menú de opciones con su pregunta: botones, una lista o varias (menuListas.ts). */
+  private menu(emit: Emit, opciones: ButtonSpec[], encabezado: string, deQue: string): Promise<void> {
+    return emitirMenu(emit, opciones, {
+      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
+      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
+      deQue,
+    });
   }
 
   /** "¿Necesitás algo más?" con cómo seguir en cada rama. */

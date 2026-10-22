@@ -147,9 +147,9 @@ export class CargadorFlow {
 
   /** Menú de clientes (por orden alfabético): botones, una lista o varias (menuListas.ts). */
   private async menuClientes(clientes: Cliente[], emit: Emit, hola: boolean): Promise<void> {
-    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
+    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
     if (!opciones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
-    return emitirMenu(emit, opciones, { una: (lista) => CARGA.elegirCliente(hola, lista), varias: (listas) => CARGA.elegirClienteVarias(hola, listas) });
+    return emitirMenu(emit, opciones, { una: (lista) => CARGA.elegirCliente(hola, lista), varias: (listas) => CARGA.elegirClienteVarias(hola, listas), deQue: "clientes" });
   }
 
   /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
@@ -400,14 +400,19 @@ export class CargadorFlow {
     // [Choferes (cliente)] [Dominios (cliente)] [🔄 Cambiar cliente]: tres botones (con más,
     // WhatsApp lo muestra como lista). Sin "Eso es todo": la sesión se corta sola a la hora.
     const cliente = clienteCodigo ? (await this.deps.catalogo.listar()).find((c) => c.codigo === clienteCodigo) : undefined;
+    // El cliente entre paréntesis sólo si entra entero en el botón (20 caracteres);
+    // si no ("Choferes (Halliburt…"), los botones van sin él: igual se nombra en el texto.
+    const conCliente = (tipo: string) => (cliente ? `${tipo} (${nombreParaBoton(cliente)})` : tipo);
+    const entra = cliente && conCliente("Choferes").length <= 20 && conCliente("Dominios").length <= 20;
     const botones: ButtonSpec[] = cliente
       ? [
-          { title: buttonTitle(`Choferes (${nombreParaBoton(cliente)})`), payload: "tipo:chofer" },
-          { title: buttonTitle(`Dominios (${nombreParaBoton(cliente)})`), payload: "tipo:dominio" },
+          { title: entra ? conCliente("Choferes") : "👤 Choferes", payload: "tipo:chofer" },
+          { title: entra ? conCliente("Dominios") : "🚛 Dominios", payload: "tipo:dominio" },
           CAMBIAR_CLIENTE,
         ]
       : [CAMBIAR_CLIENTE];
-    await emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: botones });
+    // Espera la entrega: el "O si no…" de abajo llegaba antes que este mensaje.
+    await emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga(cliente?.nombre)}`, buttons: botones, esperarEntrega: true });
     // Aparte, para no pasar de 3 botones (con 4 WhatsApp lo muestra como lista).
     // Los botones de arriba siguen valiendo (el motor acumula los de toda la respuesta).
     await emit({ kind: "buttons", text: CARGA.oCerrar, buttons: [BOTON_FIN] });

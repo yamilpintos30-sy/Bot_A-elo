@@ -39,7 +39,11 @@ export interface ButtonSpec {
 export type Outbound =
   /** `sinPie`: no agregar [Menú] [Eso es todo] (p. ej. la despedida). */
   | { kind: "text"; text: string; sinPie?: boolean }
-  | { kind: "buttons"; text: string; buttons: ButtonSpec[] }
+  /**
+   * `esperarEntrega`: le sigue otro mensaje con botones y WhatsApp a veces los
+   * desordena; el canal espera la confirmación de entrega antes de seguir.
+   */
+  | { kind: "buttons"; text: string; buttons: ButtonSpec[]; esperarEntrega?: boolean }
   | { kind: "file"; filename: string; data: Buffer; caption?: string }
   /** Imagen de bienvenida (avatar del bot) con epígrafe. Sin imagen configurada, sale como texto. */
   | { kind: "image"; caption: string };

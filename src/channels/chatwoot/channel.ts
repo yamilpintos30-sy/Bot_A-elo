@@ -29,7 +29,10 @@ export class ChatwootChannel implements Channel {
         // se manda en partes y los botones van con la última.
         const parts = splitForWhatsApp(out.text).flatMap((p, i, all) => (i === all.length - 1 ? splitForButtons(p) : [p]));
         for (const part of parts.slice(0, -1)) await this.client.sendText(conversationId, part);
-        await this.client.sendButtons(conversationId, parts[parts.length - 1]!, out.buttons);
+        const id = await this.client.sendButtons(conversationId, parts[parts.length - 1]!, out.buttons);
+        // Le sigue otro mensaje con botones (p. ej. la lista 2 después de la 1):
+        // WhatsApp los desordenaba, así que se espera la entrega de éste.
+        if (out.esperarEntrega) await this.esperarEntrega(conversationId, id);
         return;
       }
       case "file": {
@@ -63,7 +66,7 @@ export class ChatwootChannel implements Channel {
     const status = messageId ? await this.client.waitMessageDelivered(conversationId, messageId) : "sin-id";
     const confirmada = status === "delivered" || status === "read";
     const pausa = confirmada ? this.pausaMs : Math.max(this.pausaMs, 5000);
-    if (!confirmada) this.logger.warn({ conversationId, status, pausa }, "Entrega del adjunto sin confirmar; pausa de seguridad");
+    if (!confirmada) this.logger.warn({ conversationId, status, pausa }, "Entrega del mensaje sin confirmar; pausa de seguridad");
     if (pausa > 0) await new Promise((r) => setTimeout(r, pausa));
   }
 

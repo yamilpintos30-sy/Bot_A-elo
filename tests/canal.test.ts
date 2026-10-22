@@ -51,6 +51,25 @@ describe("canal de Chatwoot", () => {
     expect(orden).toEqual(["imagen javier.jpg: ¡Hola! 👋 Soy *Javier*", "esperando entrega 77", "menú"]);
   });
 
+  it("botones seguidos de otros botones (lista 1 y lista 2): espera la entrega del primero", async () => {
+    const orden: string[] = [];
+    let n = 0;
+    const client = {
+      sendButtons: vi.fn(async (_c: string, text: string) => {
+        orden.push(text);
+        return String(++n);
+      }),
+      waitMessageDelivered: vi.fn(async (_c: string, id: string) => {
+        orden.push(`esperando entrega ${id}`);
+        return "delivered";
+      }),
+    } as unknown as ChatwootClient;
+    const canal = new ChatwootChannel(client, pino({ level: "silent" }), undefined, 0);
+    await canal.send("c1", { kind: "buttons", text: "Lista 1", buttons: [{ title: "A", payload: "a" }], esperarEntrega: true });
+    await canal.send("c1", { kind: "buttons", text: "Lista 2", buttons: [{ title: "B", payload: "b" }] });
+    expect(orden).toEqual(["Lista 1", "esperando entrega 1", "Lista 2"]); // la 2 no espera: no le sigue nada
+  });
+
   it("sin imagen configurada, el saludo sale como texto", async () => {
     const sendText = vi.fn(async () => undefined);
     const canal = new ChatwootChannel({ sendText } as unknown as ChatwootClient, pino({ level: "silent" }), "assets/no-existe.jpg", 0);

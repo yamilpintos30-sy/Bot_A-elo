@@ -109,6 +109,12 @@ export class BotEngine {
     session.rol = esCargador ? "cargador" : "consulta";
     session.perfil = esCargador ? undefined : perfil;
 
+    // Varios toques que llegaron juntos (WhatsApp/Chatwoot los demoró y el buffer los
+    // unió en un texto de varios renglones): vale el ÚLTIMO, como si se hubiera tocado solo.
+    if (msg.attachments.length === 0) {
+      const ultimo = this.ultimoToque(session, msg.text);
+      if (ultimo !== undefined) msg = { ...msg, text: ultimo };
+    }
     const payload = this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined);
     session.botones = [];
     void deps.log.log({ conversationId: msg.conversationId, phone: session.phone, direction: "in", rol: session.rol, content: msg.text, meta: { attachments: msg.attachments.length, payload } });
@@ -257,6 +263,17 @@ export class BotEngine {
 
   private newSession(conversationId: string, phone: string | null): Session {
     return { conversationId, phone, rol: "consulta", botones: [], handedOffUntil: null, updatedAt: this.deps.now().toISOString() };
+  }
+
+  /**
+   * Texto de varios renglones donde cada renglón es un botón o un comando: el último
+   * renglón. undefined si no es eso (un mensaje normal de varios renglones se respeta).
+   */
+  private ultimoToque(session: Session, text: string): string | undefined {
+    const renglones = text.split("\n").map((r) => r.trim()).filter(Boolean);
+    if (renglones.length < 2) return undefined;
+    const esToque = (r: string) => this.payloadDeBoton(session, r) !== undefined || detectarComando(r) !== undefined;
+    return renglones.every(esToque) ? renglones.at(-1) : undefined;
   }
 
   private payloadDeBoton(session: Session, text: string): string | undefined {

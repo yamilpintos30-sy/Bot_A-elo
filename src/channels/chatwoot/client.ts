@@ -37,7 +37,8 @@ export class ChatwootClient {
     this.opts.echo.recordId(created.id);
   }
 
-  async sendButtons(conversationId: string, text: string, buttons: ButtonSpec[]): Promise<void> {
+  /** Devuelve el id del mensaje (para esperar su entrega). */
+  async sendButtons(conversationId: string, text: string, buttons: ButtonSpec[]): Promise<string | null> {
     this.opts.echo.recordText(conversationId, text);
     const created = await this.post(`/conversations/${conversationId}/messages`, {
       content: text,
@@ -47,6 +48,7 @@ export class ChatwootClient {
       private: false,
     });
     this.opts.echo.recordId(created.id);
+    return created.id !== undefined ? String(created.id) : null;
   }
 
   /** Archivo PDF con epígrafe. Devuelve el id del mensaje (para esperar su entrega). */
