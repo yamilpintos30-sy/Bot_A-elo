@@ -814,6 +814,9 @@ describe("chofer", () => {
     expect(t).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026 \(vence en 3 días\)/);
     expect(t).not.toMatch(/Licencia|ART|F\.931/);
     expect(buttons(outs)).toEqual(CARNET); // un solo cliente: sin [Otro cliente]
+    // Habilitación y pregunta en UN mensaje (separados, WhatsApp los desordenaba).
+    expect(outs).toHaveLength(1);
+    expect((outs[0] as Extract<Outbound, { kind: "buttons" }>).text).toMatch(/habilitado hasta 18\/10\/2026[\s\S]*\n\n¿Querés que te pase el carnet\?$/);
 
     outs = await say(CHOFER, "📄 Sí, pasámelo");
     const iFile = outs.findIndex((o) => o.kind === "file");

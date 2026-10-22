@@ -348,10 +348,10 @@ export class ConsultaFlow {
 
     if (seawhiteId === null) return emit({ kind: "buttons", text: `${texto}\n\n${CONSULTA.algoMas}`, buttons: otroCliente.length ? [BOTON_MENU, BOTON_CONSULTA, ...otroCliente] : FIN_CONSULTA });
     st.ultimos = [{ tipo, identificador, clienteCodigo, plantaCodigo: plantaCodigo!, etiqueta: destino, seawhiteId }];
-    await emit({ kind: "text", text: texto, sinPie: true });
+    // Resultado y pregunta en UN mensaje: separados, WhatsApp a veces entregaba la pregunta primero.
     return emit({
       kind: "buttons",
-      text: CONSULTA.preguntaCarnet,
+      text: `${texto}\n\n${CONSULTA.preguntaCarnet}`,
       buttons: [{ title: "📄 Sí, pasámelo", payload: "carnet" }, { title: "No, gracias", payload: "nocarnet" }, ...otroCliente],
     });
   }
