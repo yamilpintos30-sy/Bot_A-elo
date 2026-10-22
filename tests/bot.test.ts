@@ -218,7 +218,7 @@ async function elegirCarga(say: Awaited<ReturnType<typeof setup>>["say"], tipo: 
 }
 
 /** Carga completa por el flujo del cargador (para preparar datos de los tests de consulta). */
-const MENU_POST_CARGA = ["Choferes (Total)", "Dominios (Total)", "🔄 Cambiar cliente"];
+const MENU_POST_CARGA = ["Choferes (Total)", "Dominios (Total)", "🔄 Cambiar cliente", "Eso es todo, gracias"];
 
 async function cargar(say: Awaited<ReturnType<typeof setup>>["say"], tipo: "👤 Choferes" | "🚛 Dominios", cliente = "Total Austral", operadora = "Planta 1") {
   await elegirCarga(say, tipo, cliente, operadora);
@@ -482,7 +482,11 @@ describe("cargador", () => {
     ]);
     // Ya no se ofrece nada más: resultado + "¿Querés cargar más…?" en un mensaje.
     expect(buttons(outs)).not.toContain("👤 Cargar choferes");
-    expect((outs.at(-1) as Extract<Outbound, { kind: "buttons" }>).text).toMatch(/Carga completada[\s\S]*Querés cargar más documentación de este cliente, o cambiar de cliente/);
+    expect((outs.at(-2) as Extract<Outbound, { kind: "buttons" }>).text).toMatch(/Carga completada[\s\S]*Querés cargar más documentación de este cliente, o cambiar de cliente/);
+    // Aparte, "O si no, podés cerrar la sesión" con [Eso es todo]; los botones de arriba siguen valiendo.
+    expect(outs.at(-1)).toEqual({ kind: "buttons", text: "O si no, podés cerrar la sesión.", buttons: [{ title: "Eso es todo, gracias", payload: "fin" }] });
+    outs = await say(CARGADOR, "Choferes (Total)");
+    expect(texts(outs)).toMatch(/choferes/i);
   });
 
   it("LISTADO mezclado: los dos avisos salen igual eligiendo Choferes o Dominios", async () => {

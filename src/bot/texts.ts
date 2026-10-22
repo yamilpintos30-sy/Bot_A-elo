@@ -99,6 +99,8 @@ export const CARGA = {
   elegirTipo: (destino: string) => `*${destino}*\n¿Qué documentación vas a cargar?`,
   menu: "¿Qué documentación vas a cargar?",
   otraCarga: "¿Querés cargar más documentación de este cliente, o cambiar de cliente?",
+  /** Mensaje aparte, debajo del menú de después de una carga (los botones de arriba siguen valiendo). */
+  oCerrar: "O si no, podés cerrar la sesión.",
   /** Mandó el archivo antes de terminar de elegir: se guarda y se sigue con lo que falta. */
   archivoEnEspera: "📎 Guardé el archivo. Primero elegí cliente, operadora y qué documentación es.",
   encontrado: (destino: string, tipo: "chofer" | "dominio") => `${TIPO[tipo].emoji} *${destino}* – ${TIPO[tipo].plural}\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,

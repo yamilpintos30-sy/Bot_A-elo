@@ -424,7 +424,10 @@ export class CargadorFlow {
           CAMBIAR_CLIENTE,
         ]
       : [CAMBIAR_CLIENTE];
-    return emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: botones });
+    await emit({ kind: "buttons", text: `${texto}\n\n${CARGA.otraCarga}`, buttons: botones });
+    // Aparte, para no pasar de 3 botones (con 4 WhatsApp lo muestra como lista).
+    // Los botones de arriba siguen valiendo (el motor acumula los de toda la respuesta).
+    await emit({ kind: "buttons", text: CARGA.oCerrar, buttons: [BOTON_FIN] });
   }
 }
 

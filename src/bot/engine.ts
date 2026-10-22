@@ -5,7 +5,7 @@
  *     (cargan) y consultores (consultan). App cerrada: a un número que no está
  *     en ninguna no se le responde. Un .txt nuevo rige desde el mensaje siguiente.
  *   - Los botones de WhatsApp vuelven como texto con su TÍTULO: se traducen a
- *     su payload con los botones del último mensaje de la sesión.
+ *     su payload con los botones de la última respuesta (todos sus mensajes).
  *   - Como en Enri: toda respuesta cierra con [Menú 😊] [Eso es todo, gracias];
  *     "Eso es todo" despide y cierra; un "gracias" suelto después del cierre no
  *     reabre la conversación.
@@ -154,7 +154,8 @@ export class BotEngine {
     let cadena = Promise.resolve();
 
     const enviar = (out: Outbound) => {
-      if (out.kind === "buttons") session.botones = out.buttons;
+      // Se acumulan: con dos mensajes con botones en la misma respuesta, valen los de ambos.
+      if (out.kind === "buttons") session.botones = [...session.botones, ...out.buttons];
       cadena = cadena.then(async () => {
         await this.channel.send(conversationId, out);
         const content = out.kind === "file" ? `[archivo] ${out.filename}` : out.kind === "image" ? `[imagen] ${out.caption}` : out.text;
