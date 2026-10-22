@@ -26,6 +26,12 @@ export interface Channel {
 
 /** Inactividad tras la cual la conversación arranca de cero. */
 const SESSION_TTL_MS = 60 * 60_000;
+/**
+ * Cierre por inactividad (cargadores): sólo se despiden las sesiones que
+ * vencieron hace menos de esto. Si el bot estuvo apagado más tiempo, las más
+ * viejas no reciben una despedida tardía (igual arrancan de cero).
+ */
+const VENTANA_CIERRE_MS = 30 * 60_000;
 /** Durante cuánto tiempo tras el cierre un "gracias" suelto no reabre la conversación. */
 const CORTESIA_TRAS_CIERRE_MS = 2 * 60 * 60_000;
 /**
@@ -194,6 +200,35 @@ export class BotEngine {
   }
 
   /** Conversación resuelta en Chatwoot: el próximo mensaje arranca de cero. */
+  /**
+   * Cargadores con 1 hora sin actividad: se cierra la sesión (cliente libre para
+   * la próxima carga), se cancela la carga pendiente y se despide. Al volver a
+   * escribir arranca de cero con el saludo. Lo llama un temporizador (index.ts).
+   */
+  async cerrarInactivas(): Promise<number> {
+    const { deps } = this;
+    const hasta = new Date(deps.now().getTime() - SESSION_TTL_MS);
+    const sesiones = await deps.sessions.tomarInactivas(new Date(hasta.getTime() - VENTANA_CIERRE_MS), hasta);
+    for (const s of sesiones) {
+      let texto = DESPEDIDA.inactividad;
+      const st = s.cargador;
+      if (st?.loteId || st?.cargaId) {
+        const lote = st.loteId ? deps.lotes.obtener(st.loteId) : undefined;
+        if (st.loteId) deps.lotes.borrar(st.loteId);
+        if (lote || st.etapa === "esperando_confirmacion") {
+          await this.cargador.cerrarRegistro(lote?.cargaId ?? st.cargaId, "cancelada", lote?.resultado.costoUsd ?? null);
+          texto = DESPEDIDA.inactividadConCarga;
+        }
+      }
+      this.cerradas.set(s.conversationId, deps.now().getTime());
+      await this.channel
+        .send(s.conversationId, { kind: "text", text: texto, sinPie: true })
+        .catch((err) => deps.logger.warn({ err, conversationId: s.conversationId }, "No se pudo mandar la despedida por inactividad"));
+      deps.logger.info({ conversationId: s.conversationId }, "Sesión de carga cerrada por 1 hora sin actividad");
+    }
+    return sesiones.length;
+  }
+
   async reset(conversationId: string): Promise<void> {
     await this.deps.sessions.delete(conversationId);
   }

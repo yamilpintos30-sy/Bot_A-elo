@@ -36,6 +36,12 @@ async function main(): Promise<void> {
   setTimeout(() => void cerrarAbandonadas(arranque), 3 * 60_000).unref();
   setInterval(() => void cerrarAbandonadas(new Date(Date.now() - 2 * 60 * 60_000)), 30 * 60_000).unref();
 
+  // Cargadores con 1 hora sin actividad: se cierra la sesión y se despide.
+  setInterval(
+    () => void container.engine.cerrarInactivas().catch((err) => logger.warn({ err: (err as Error).message }, "No se pudieron cerrar las sesiones inactivas")),
+    5 * 60_000,
+  ).unref();
+
   const app = createApp(container);
   const server = app.listen(config.PORT, () => {
     logger.info({ port: config.PORT }, `${config.BOT_NAME} escuchando`);

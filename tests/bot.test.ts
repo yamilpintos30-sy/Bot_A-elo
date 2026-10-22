@@ -112,6 +112,9 @@ function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVe
   };
   const procesar = vi.fn(opts.procesar ?? porDefecto);
   const fallas = new MemoryFallas();
+  let ahora = HOY;
+  /** Adelanta el reloj del bot (inactividad). */
+  const avanzar = (ms: number) => void (ahora = new Date(ahora.getTime() + ms));
   const deps: BotDeps = {
     botName: "Javier",
     timezone: "America/Argentina/Buenos_Aires",
@@ -138,7 +141,7 @@ function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVe
     fallas,
     lotes: new LotesPendientes(),
     logger,
-    now: () => HOY,
+    now: () => ahora,
   };
   const engine = new BotEngine(deps, { send: async (conversationId, out) => void sent.push({ conversationId, out }) });
   let n = 0;
@@ -148,7 +151,7 @@ function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVe
     await engine.handle(msg);
     return sent.map((s) => s.out);
   };
-  return { engine, deps, seawhite, registro, procesar, say, sent, fallas };
+  return { engine, deps, seawhite, registro, procesar, say, sent, fallas, avanzar };
 }
 
 const pdfAdj = (name = "carnets.pdf"): IncomingAttachment => ({ url: `https://chatwoot/${name}`, fileType: "file", contentType: "application/pdf", fileName: name });
@@ -299,6 +302,40 @@ describe("cargador", () => {
     expect(texts(outs)).toMatch(/¿Qué \*cliente\* vas a cargar\?/);
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
     expect(procesar).toHaveBeenCalledTimes(1);
+  });
+
+  it("1 hora sin actividad: se despide, libera el cliente y al volver saluda de nuevo", async () => {
+    const { say, engine, sent, avanzar } = setup();
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
+    await say(CARGADOR, "Confirmar carga");
+
+    // Antes de la hora no pasa nada.
+    sent.length = 0;
+    avanzar(50 * 60_000);
+    expect(await engine.cerrarInactivas()).toBe(0);
+    expect(sent).toHaveLength(0);
+
+    avanzar(15 * 60_000);
+    expect(await engine.cerrarInactivas()).toBe(1);
+    expect(sent.map((x) => (x.out.kind === "text" ? x.out.text : ""))).toEqual([expect.stringMatching(/^⏱️ Pasó 1 hora sin actividad.*¡Saludos! 👋$/)]);
+    // Una sola vez.
+    sent.length = 0;
+    expect(await engine.cerrarInactivas()).toBe(0);
+
+    const outs = await say(CARGADOR, "hola");
+    expect(texts(outs)).toBe("¡Hola! 👋\n¿Qué *cliente* vas a cargar?");
+  });
+
+  it("1 hora sin actividad con una carga sin confirmar: se cancela y lo avisa", async () => {
+    const { say, engine, sent, avanzar, registro } = setup();
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
+    sent.length = 0;
+    avanzar(61 * 60_000);
+    expect(await engine.cerrarInactivas()).toBe(1);
+    expect(sent.map((x) => (x.out.kind === "text" ? x.out.text : "")).join()).toMatch(/La carga pendiente se canceló/);
+    expect(JSON.stringify(registro)).toContain("cancelada");
   });
 
   it("después de una carga, [🔄 Cambiar cliente] vuelve a elegir cliente y operadora", async () => {

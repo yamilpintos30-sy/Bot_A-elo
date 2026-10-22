@@ -60,6 +60,9 @@ export const DESPEDIDA = {
   consulta: "¡Gracias por comunicarte con SEA WHITE! Cuando necesites consultar un vencimiento, escribime. Saludos.",
   cargador: "Listo. Cuando tengas otra carga, escribime.",
   cargaCancelada: "Listo. La carga pendiente se canceló: no se cargó nada. Cuando tengas otra carga, escribime.",
+  /** Cargador: 1 hora sin actividad, la sesión se cierra sola (el cliente queda libre). */
+  inactividad: "⏱️ Pasó 1 hora sin actividad, así que cerré la sesión. Cuando tengas otra carga, escribime y arrancamos de nuevo. ¡Saludos! 👋",
+  inactividadConCarga: "⏱️ Pasó 1 hora sin actividad, así que cerré la sesión. La carga pendiente se canceló: no se cargó nada. Cuando tengas otra carga, escribime y arrancamos de nuevo. ¡Saludos! 👋",
 };
 
 // --- Cargadores ------------------------------------------------------------------

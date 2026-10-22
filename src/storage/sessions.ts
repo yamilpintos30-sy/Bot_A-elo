@@ -8,6 +8,12 @@ export interface SessionStore {
   get(conversationId: string): Promise<Session | null>;
   save(session: Session): Promise<void>;
   delete(conversationId: string): Promise<void>;
+  /**
+   * Sesiones de CARGADORES inactivas desde entre `desde` y `hasta` (sin una
+   * persona atendiendo): se borran y se devuelven. El borrado es condicional
+   * (mismo updated_at), así que si hay dos instancias (deploy) sólo una la toma.
+   */
+  tomarInactivas(desde: Date, hasta: Date): Promise<Session[]>;
 }
 
 export class SupabaseSessions implements SessionStore {
@@ -35,6 +41,29 @@ export class SupabaseSessions implements SessionStore {
   async delete(conversationId: string): Promise<void> {
     check(await this.db.from("anelo_sessions").delete().eq("conversation_id", conversationId), "borrar sesión");
   }
+
+  async tomarInactivas(desde: Date, hasta: Date): Promise<Session[]> {
+    const ahora = new Date().toISOString();
+    const filas = check(
+      await this.db
+        .from("anelo_sessions")
+        .select("conversation_id, context, handed_off_until, updated_at")
+        .eq("state", "cargador")
+        .gte("updated_at", desde.toISOString())
+        .lt("updated_at", hasta.toISOString())
+        .or(`handed_off_until.is.null,handed_off_until.lt.${ahora}`),
+      "buscar sesiones inactivas",
+    ) as Array<{ conversation_id: string; context: Session; handed_off_until: string | null; updated_at: string }>;
+    const tomadas: Session[] = [];
+    for (const f of filas ?? []) {
+      const borradas = check(
+        await this.db.from("anelo_sessions").delete().eq("conversation_id", f.conversation_id).eq("updated_at", f.updated_at).select("conversation_id"),
+        "cerrar sesión inactiva",
+      ) as unknown[] | null;
+      if (borradas && borradas.length > 0) tomadas.push({ ...f.context, conversationId: f.conversation_id, handedOffUntil: f.handed_off_until, updatedAt: f.updated_at });
+    }
+    return tomadas;
+  }
 }
 
 export class MemorySessions implements SessionStore {
@@ -48,6 +77,19 @@ export class MemorySessions implements SessionStore {
   }
   async delete(id: string): Promise<void> {
     this.map.delete(id);
+  }
+  async tomarInactivas(desde: Date, hasta: Date): Promise<Session[]> {
+    const ahora = Date.now();
+    const tomadas: Session[] = [];
+    for (const s of [...this.map.values()]) {
+      const t = new Date(s.updatedAt).getTime();
+      const atendida = s.handedOffUntil !== null && new Date(s.handedOffUntil).getTime() > ahora;
+      if (s.rol === "cargador" && t >= desde.getTime() && t < hasta.getTime() && !atendida) {
+        this.map.delete(s.conversationId);
+        tomadas.push(structuredClone(s));
+      }
+    }
+    return tomadas;
   }
 }
 
