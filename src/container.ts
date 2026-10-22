@@ -63,6 +63,7 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
     catalogo: new SupabaseCatalogo(supabase),
     cargadores: new SupabaseListaTelefonos(supabase, "anelo_cargadores"),
     consultores: new SupabaseListaTelefonos(supabase, "anelo_consultores"),
+    logistica: new SupabaseListaTelefonos(supabase, "anelo_logistica"),
     registro: new SupabaseRegistro(supabase),
     sessions: new SupabaseSessions(supabase),
     log: new SupabaseMessageLog(supabase, logger),

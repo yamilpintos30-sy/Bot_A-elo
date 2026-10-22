@@ -46,6 +46,14 @@ export const SEAWHITE_ALLOWED_ENDPOINTS: readonly AllowedEndpoint[] = [
   { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes\/\d{7,8}\/\d{1,10}$/, writes: false, description: "subclientes de un DNI y cliente (API 2)" },
   { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes-dominio\/[A-Z0-9]{6,8}$/, writes: false, description: "clientes de un dominio (API 7)" },
   { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-dominio\/[A-Z0-9]{6,8}\/\d{1,10}$/, writes: false, description: "subclientes de un dominio y cliente (API 8)" },
+  // Logística (mismo manual, sólo lectura): listados grupales y búsqueda por nombre.
+  { method: "GET", path: "/api/VencimientosAnelo/clientes-habilitados", writes: false, description: "clientes con choferes vigentes (API 3)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-habilitados\/\d{1,10}$/, writes: false, description: "subclientes con choferes vigentes (API 4)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/choferes-habilitados\/\d{1,10}\/\d{1,10}$/, writes: false, description: "choferes vigentes de un cliente y subcliente (API 5)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/buscar-choferes\/[A-Za-z0-9%._~-]{3,150}$/, writes: false, description: "buscar choferes por nombre (API 6)" },
+  { method: "GET", path: "/api/VencimientosAnelo/clientes-habilitados-dominio", writes: false, description: "clientes con dominios vigentes (API 9)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-habilitados-dominio\/\d{1,10}$/, writes: false, description: "subclientes con dominios vigentes (API 10)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/dominios-habilitados\/\d{1,10}\/\d{1,10}$/, writes: false, description: "dominios vigentes de un cliente y subcliente (API 11)" },
   // EXCEPCIÓN AUTORIZADA (2026-10-13): carga de vencimientos.
   { method: "POST", path: "/api/VencimientosAnelo/chofer", writes: true, description: "CARGA de vencimientos de chofer" },
   { method: "POST", path: "/api/VencimientosAnelo/dominio", writes: true, description: "CARGA de vencimientos de dominio" },

@@ -241,6 +241,27 @@ export const CONSULTA = {
   algoMas: "¿Necesitás algo más?\n🔎 *Otra habilitación*: otro DNI o dominio.\n🏠 *Menú principal*: elegir entre Habilitación y VTV y seguro.",
   algoMasVehiculo: "¿Necesitás algo más?\n🏠 *Menú principal*: otra patente, o consultar una habilitación.",
   carnetNoDisponible: "No pude traer el carnet en este momento. Probá de nuevo en unos minutos.",
+
+  // --- Logística ---
+  menuLogistica: [
+    "¿Qué tipo de consulta querés hacer?",
+    "🔎 *Individual*: un chofer o un vehículo, por DNI, nombre o dominio.",
+    "📋 *Grupal*: el listado en PDF de los choferes o dominios habilitados de un cliente.",
+  ].join("\n"),
+  menuIndividual: "¿Cómo querés buscar?",
+  algoMasLogistica: "¿Necesitás algo más?\n🔎 *Otra habilitación*: otro DNI, nombre o dominio.\n🏠 *Menú principal*: consultas individuales o grupales.",
+  pedirNombre: "👤 Escribí el *apellido* del chofer (o apellido y nombre). Al menos 3 letras.",
+  nombreMuyCorto: "❌ Escribí al menos 3 letras del apellido o del nombre.",
+  buscandoNombre: (t: string) => `🔎 Buscando choferes con "*${t}*"…`,
+  sinCoincidenciasNombre: (t: string) => `❌ No encontré choferes con "*${t}*". Probá con el apellido, o escribí el DNI.`,
+  demasiadosNombres: (n: number, t: string) => `Encontré *${n}* choferes con "*${t}*": son demasiados para mostrarlos. Escribí algo más preciso (apellido y nombre).`,
+  elegirEncontrado: (n: number, t?: string) => `👤 Encontré *${n}* chofer${n === 1 ? "" : "es"}${t ? ` con "*${t}*"` : ""}.\n¿Cuál es?`,
+  menuGrupal: "¿Qué listado necesitás?",
+  listadoElegirCliente: (tipo: "chofer" | "dominio") => `📋 Listado de *${tipo === "chofer" ? "choferes" : "dominios"}* habilitados.\n¿De qué cliente?`,
+  listadoSinClientes: (tipo: "chofer" | "dominio") => `No hay clientes con ${tipo === "chofer" ? "choferes" : "dominios"} habilitados en este momento.`,
+  armandoListado: "⏳ Armando el listado en PDF…",
+  listadoVacio: "No hay registros vigentes para ese cliente y operadora.",
+  algoMasListado: "¿Necesitás algo más?\n📋 *Otro listado*: de otro cliente, o el de choferes o dominios.\n🏠 *Menú principal*: consultas individuales o grupales.",
 };
 
 export interface LineaPlanta {

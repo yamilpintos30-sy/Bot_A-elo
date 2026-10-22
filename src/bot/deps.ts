@@ -3,7 +3,7 @@
  * con dobles (sin Claude, sin SEA WHITE, sin Chatwoot, sin Supabase).
  */
 import type { OnEtapa, ProcesamientoResultado } from "../extraction/procesarCarnets.js";
-import type { CodigoNombre, Consulta, Documentacion, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
+import type { CodigoNombre, Consulta, Documentacion, FilaListado, RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { ResultadoVerificacion } from "../extraction/verificadorComprobantes.js";
 import type { ListaTelefonos } from "../storage/cargadores.js";
 import type { FallasRepo } from "../storage/fallas.js";
@@ -20,6 +20,14 @@ export interface SeaWhiteService {
   clientesHabilitados(tipo: TipoRegistro, identificador: string): Promise<CodigoNombre[]>;
   /** Subclientes (operadoras) vigentes de ese DNI o dominio en un cliente (APIs 2 y 8). */
   subclientesHabilitados(tipo: TipoRegistro, identificador: string, cliente: string): Promise<CodigoNombre[]>;
+  /** Logística: choferes por nombre (API 6, sin filtro de vigencia). `codigo` = DNI. */
+  buscarChoferes(texto: string): Promise<CodigoNombre[]>;
+  /** Logística: clientes con algún chofer (API 3) o dominio (API 9) vigente. */
+  clientesConVigentes(tipo: TipoRegistro): Promise<CodigoNombre[]>;
+  /** Logística: subclientes de un cliente con algún chofer (API 4) o dominio (API 10) vigente. */
+  subclientesConVigentes(tipo: TipoRegistro, cliente: string): Promise<CodigoNombre[]>;
+  /** Logística: todos los choferes (API 5) o dominios (API 11) vigentes de un cliente y subcliente. */
+  listadoVigentes(tipo: TipoRegistro, cliente: string, subcliente: string): Promise<FilaListado[]>;
   documentacion(tipo: TipoRegistro, identificador: string): Promise<Documentacion>;
   descargarPdf(tipo: TipoRegistro, id: number): Promise<Buffer>;
   /** Razón social del chofer por su teléfono (para el saludo); null si no está. */
@@ -41,6 +49,8 @@ export interface BotDeps {
   cargadores: ListaTelefonos;
   /** Pueden consultar (choferes). Si un número no está en ninguna lista, no se le responde. */
   consultores: ListaTelefonos;
+  /** Logística: consultas individuales (también por nombre) y listados grupales en PDF. */
+  logistica: ListaTelefonos;
   registro: RegistroRepo;
   sessions: SessionStore;
   log: MessageLog;

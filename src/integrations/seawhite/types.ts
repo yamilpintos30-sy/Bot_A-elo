@@ -104,6 +104,18 @@ export interface CodigoNombre {
   nombre: string;
 }
 
+/** Una fila de los listados grupales (APIs 5 y 11). */
+export interface FilaListado {
+  /** DNI o dominio. */
+  identificador: string;
+  /** Choferes: apellido y nombre. */
+  nombre: string | null;
+  /** Dominios: "Camion", "Acoplado"… tal como lo manda la API. */
+  tipoVehiculo: string | null;
+  /** dd-MM-yyyy. */
+  vencimiento: string;
+}
+
 /** Respuesta de POST /api/vencimientos/chofer (consulta de documentación, igual que Enri). */
 export const documentacionChoferSchema = z.object({
   ok: z.boolean(),

@@ -13,6 +13,14 @@
  *
  *   📄 VTV y seguro -> [VTV] [Seguro] [Menú] -> patente -> PDF -> ¿el otro también?
  *
+ * LOGÍSTICA (lista aparte) usa el mismo flujo con otro menú principal:
+ *
+ *   🔎 Individual -> [Por DNI] [Por nombre] [Por dominio]
+ *        por nombre: al menos 3 letras -> choferes que coinciden (API 6, con el
+ *        DNI debajo para distinguir a los homónimos) -> elige -> sigue como por DNI
+ *   📋 Grupal -> [Choferes] [Dominios] -> cliente (API 3 / 9) -> operadora (4 / 10)
+ *        -> PDF con todos los vigentes (5 / 11) y el resumen como epígrafe
+ *
  * Los clientes salen de SEA WHITE, no de la tabla del bot: sólo aparecen
  * aquellos donde ese DNI o esa patente tienen habilitación vigente.
  */
@@ -25,8 +33,9 @@ import { nombreCorto } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU, PIE } from "./comandos.js";
 import type { BotDeps, Emit } from "./deps.js";
 import { aclaracionLista, emitirMenu, titulos, variasListas } from "./menuListas.js";
+import { generarListadoPdf, nombreArchivoListado, resumenListado } from "./listadoPdf.js";
 import { CONSULTA, respuestaConsulta, type LineaPlanta } from "./texts.js";
-import type { ButtonSpec, ConsultaState, IncomingMessage, Session } from "./types.js";
+import type { ButtonSpec, ConsultaState, IncomingMessage, Perfil, Session } from "./types.js";
 
 type Modo = NonNullable<ConsultaState["modo"]>;
 type Rama = NonNullable<ConsultaState["rama"]>;
@@ -45,6 +54,18 @@ const BOTON_OTRO_CLIENTE: ButtonSpec = { title: "🏢 Otro cliente", payload: "o
 /** Cierre de una consulta de habilitación: inicio, otro DNI/dominio, o terminar. */
 const FIN_CONSULTA: ButtonSpec[] = [BOTON_MENU, BOTON_CONSULTA, BOTON_FIN];
 
+// --- Logística ---
+const MENU_LOGISTICA: ButtonSpec[] = [{ title: "🔎 Individual", payload: "r:habilitacion" }, { title: "📋 Grupal", payload: "r:grupal" }, BOTON_FIN];
+const MENU_INDIVIDUAL: ButtonSpec[] = [
+  { title: "🪪 Por DNI", payload: "m:chofer" },
+  { title: "👤 Por nombre", payload: "m:nombre" },
+  { title: "🚛 Por dominio", payload: "m:dominio" },
+];
+const MENU_GRUPAL: ButtonSpec[] = [{ title: "👤 Choferes", payload: "g:chofer" }, { title: "🚛 Dominios", payload: "g:dominio" }, BOTON_MENU];
+const FIN_LISTADO: ButtonSpec[] = [BOTON_MENU, { title: "📋 Otro listado", payload: "r:grupal" }, BOTON_FIN];
+/** Búsqueda por nombre: con más resultados se pide algo más preciso. */
+const MAX_ENCONTRADOS = 30;
+
 const ramaDe = (m: Modo): Rama => (m === "vtv" || m === "seguro" ? "vehiculo" : "habilitacion");
 
 interface Opcion {
@@ -53,7 +74,8 @@ interface Opcion {
 }
 
 function opcionDeBoton(payload: string | undefined): Opcion | undefined {
-  if (payload === "r:habilitacion" || payload === "r:vehiculo") return { rama: payload.slice(2) as Rama };
+  if (payload === "r:habilitacion" || payload === "r:vehiculo" || payload === "r:grupal") return { rama: payload.slice(2) as Rama };
+  if (payload === "g:chofer" || payload === "g:dominio") return { rama: "grupal", modo: payload.slice(2) as Modo };
   if (payload?.startsWith("m:")) {
     const modo = payload.slice(2) as Modo;
     return { rama: ramaDe(modo), modo };
@@ -64,13 +86,28 @@ function opcionDeBoton(payload: string | undefined): Opcion | undefined {
 /** Opciones escritas en vez de tocar el botón. */
 function opcionEscrita(texto: string): Opcion | undefined {
   const t = normalizeText(texto);
-  if (/^(habilitacion|habilitaciones|consulta habilitacion|credencial|vencimiento|vencimientos)$/.test(t)) return { rama: "habilitacion" };
+  if (/^(habilitacion|habilitaciones|consulta habilitacion|credencial|vencimiento|vencimientos|individual|consulta individual)$/.test(t)) return { rama: "habilitacion" };
+  if (/^(grupal|consulta grupal|listado|listados)$/.test(t)) return { rama: "grupal" };
   if (/^(vtv y seguro|vtv y seguros|consulta vtv y seguro|comprobantes)$/.test(t)) return { rama: "vehiculo" };
   if (/^(por dni|dni|chofer|choferes|persona)$/.test(t)) return { rama: "habilitacion", modo: "chofer" };
+  if (/^(por nombre|nombre)$/.test(t)) return { rama: "habilitacion", modo: "nombre" };
   if (/^(por dominio|dominio|patente|vehiculo|camion|unidad)$/.test(t)) return { rama: "habilitacion", modo: "dominio" };
   if (/^(vtv|consulta vtv)$/.test(t)) return { rama: "vehiculo", modo: "vtv" };
   if (/^(seguro|consulta seguro|poliza)$/.test(t)) return { rama: "vehiculo", modo: "seguro" };
   return undefined;
+}
+
+/** Cada perfil ve sus opciones: VTV y seguro sólo choferes; nombre y grupal sólo logística. */
+function permitida(o: Opcion, perfil: Perfil): boolean {
+  if (perfil === "logistica") return o.rama !== "vehiculo";
+  return o.rama !== "grupal" && o.modo !== "nombre";
+}
+
+/** "22/10/2026 12:15" en la zona horaria del bot (pie del PDF). */
+function ahoraTexto(timeZone: string, now: Date): string {
+  const p = new Intl.DateTimeFormat("es-AR", { timeZone, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now);
+  const g = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+  return `${g("day")}/${g("month")}/${g("year")} ${g("hour")}:${g("minute")}`;
 }
 
 const otroDoc = (d: Doc): Doc => (d === "vtv" ? "seguro" : "vtv");
@@ -87,7 +124,11 @@ export class ConsultaFlow {
   constructor(private readonly deps: BotDeps) {}
 
   async handle(session: Session, msg: IncomingMessage, payload: string | undefined, emit: Emit): Promise<void> {
-    const st: ConsultaState = (session.consulta ??= { saludado: false });
+    const perfil: Perfil = session.perfil ?? "chofer";
+    // Si el número cambió de lista (chofer <-> logística), se empieza de cero.
+    if (session.consulta && (session.consulta.perfil ?? "chofer") !== perfil) session.consulta = { saludado: session.consulta.saludado, perfil };
+    const st: ConsultaState = (session.consulta ??= { saludado: false, perfil });
+    st.perfil = perfil;
     if (!st.saludado) {
       st.saludado = true;
       // Como Enri: foto del bot con el saludo (por el nombre si el teléfono está
@@ -98,20 +139,23 @@ export class ConsultaFlow {
 
     // --- Botones y comandos ---
     if (payload === "menu") {
-      session.consulta = { saludado: true };
-      return this.menuPrincipal(emit);
+      session.consulta = { saludado: true, perfil };
+      return this.menuPrincipal(perfil, emit);
     }
     if (payload === "consulta") {
-      // Otro DNI o dominio: vuelve a [Por DNI] [Por dominio].
-      session.consulta = { saludado: true, rama: "habilitacion" };
+      // Otro DNI o dominio (o nombre): vuelve a elegir cómo buscar.
+      session.consulta = { saludado: true, perfil, rama: "habilitacion" };
       return this.retomar(session.consulta, emit);
     }
     if (payload === "otrocli") return this.menuClientesHabilitados(st, emit);
     if (payload === "carnet") return this.enviarCarnet(st, emit);
-    if (payload === "nocarnet") return this.algoMas(emit, CONSULTA.algoMas, FIN_CONSULTA);
+    if (payload === "nocarnet") return this.algoMas(emit, this.textoAlgoMas(st), FIN_CONSULTA);
     if (payload === "otrodoc") return this.enviarOtroDoc(session, st, emit);
     if (payload?.startsWith("hc:")) return this.elegirCliente(st, payload.slice(3), emit);
     if (payload?.startsWith("hs:")) return this.elegirOperadora(st, payload.slice(3), emit);
+    if (payload?.startsWith("hn:")) return this.elegirEncontrado(st, payload.slice(3), emit);
+    if (payload?.startsWith("gc:")) return this.elegirClienteListado(st, payload.slice(3), emit);
+    if (payload?.startsWith("gs:")) return this.elegirSubclienteListado(st, payload.slice(3), emit);
 
     // Este número no recibe archivos (sólo los cargadores).
     if (msg.attachments.length > 0) {
@@ -120,16 +164,19 @@ export class ConsultaFlow {
     }
 
     const opcion = opcionDeBoton(payload) ?? opcionEscrita(msg.text);
-    if (opcion) return this.ir(st, opcion, emit);
+    if (opcion && permitida(opcion, perfil)) return this.ir(st, opcion, emit);
 
     // --- Menú principal: hasta elegir una rama no se toma nada más ---
-    if (!st.rama) return this.menuPrincipal(emit);
+    if (!st.rama) return this.menuPrincipal(perfil, emit);
 
     // --- Rama VTV y seguro ---
     if (st.rama === "vehiculo") {
       if (!st.modo) return this.retomar(st, emit);
       return this.pasoDocumento(session, st, st.modo as Doc, msg.text, emit);
     }
+
+    // --- Logística: listado grupal ---
+    if (st.rama === "grupal") return this.pasoListado(st, msg, emit);
 
     // --- Rama habilitación ---
     return this.pasoHabilitacion(st, msg, emit);
@@ -153,8 +200,14 @@ export class ConsultaFlow {
 
   // --- Menú y elección -----------------------------------------------------------
 
-  private menuPrincipal(emit: Emit): Promise<void> {
+  private menuPrincipal(perfil: Perfil, emit: Emit): Promise<void> {
+    if (perfil === "logistica") return emit({ kind: "buttons", text: CONSULTA.menuLogistica, buttons: MENU_LOGISTICA });
     return emit({ kind: "buttons", text: CONSULTA.menuPrincipal, buttons: MENU_PRINCIPAL });
+  }
+
+  /** "¿Necesitás algo más?" de una habilitación, según quién consulta. */
+  private textoAlgoMas(st: ConsultaState): string {
+    return st.perfil === "logistica" ? CONSULTA.algoMasLogistica : CONSULTA.algoMas;
   }
 
   /** Eligió una rama (y quizás una opción dentro de ella): empieza de cero en esa opción. */
@@ -176,16 +229,27 @@ export class ConsultaFlow {
     st.plantaCodigo = undefined;
     st.plantaNombre = undefined;
     st.ultimos = undefined;
+    st.encontrados = undefined;
+    st.listado = undefined;
   }
 
   /** Repite la pregunta del paso en el que está (tras un aviso, un adjunto, etc.). */
   private retomar(st: ConsultaState, emit: Emit): Promise<void> {
-    if (!st.rama) return this.menuPrincipal(emit);
+    const perfil = st.perfil ?? "chofer";
+    if (!st.rama) return this.menuPrincipal(perfil, emit);
     if (st.rama === "vehiculo") {
       if (st.modo === "vtv" || st.modo === "seguro") return emit({ kind: "text", text: CONSULTA.pedirPatenteDoc(st.modo) });
       return emit({ kind: "buttons", text: CONSULTA.menuVehiculo, buttons: MENU_VEHICULO });
     }
-    if (st.modo !== "chofer" && st.modo !== "dominio") return emit({ kind: "buttons", text: CONSULTA.menuHabilitacion, buttons: MENU_HABILITACION });
+    if (st.rama === "grupal") return this.retomarListado(st, emit);
+    if (st.modo === "nombre") {
+      if (st.encontrados?.length) return this.menuEncontrados(st, emit);
+      return emit({ kind: "text", text: CONSULTA.pedirNombre });
+    }
+    if (st.modo !== "chofer" && st.modo !== "dominio") {
+      if (perfil === "logistica") return emit({ kind: "buttons", text: CONSULTA.menuIndividual, buttons: MENU_INDIVIDUAL });
+      return emit({ kind: "buttons", text: CONSULTA.menuHabilitacion, buttons: MENU_HABILITACION });
+    }
     if (st.habilitados?.length && !st.clienteCodigo) return this.menuClientesHabilitados(st, emit);
     if (st.clienteCodigo && st.subclientes?.length && !st.plantaCodigo) return this.menuOperadoras(st, emit);
     return this.pedirIdentificador(st.modo, emit);
@@ -198,6 +262,19 @@ export class ConsultaFlow {
   // --- Habilitación ----------------------------------------------------------------
 
   private async pasoHabilitacion(st: ConsultaState, msg: IncomingMessage, emit: Emit): Promise<void> {
+    // Logística, por nombre: un DNI escrito se consulta directo; si no, se busca el nombre
+    // (o se elige de los encontrados escribiéndolo, si coincide con uno solo).
+    if (st.modo === "nombre") {
+      const dni = findDniInText(msg.text);
+      if (dni) {
+        st.modo = "chofer";
+        return this.buscarClientes(st, "chofer", dni, emit);
+      }
+      const elegido = st.encontrados?.length ? elegidoPorTexto(msg.text, st.encontrados) : undefined;
+      if (elegido) return this.elegirEncontrado(st, elegido.codigo, emit);
+      return this.buscarPorNombre(st, msg.text, emit);
+    }
+
     // DNI o patente escritos (también sin haber tocado [Por DNI] / [Por dominio]).
     const dni = st.modo !== "dominio" ? findDniInText(msg.text) : undefined;
     const patente = !dni && st.modo !== "chofer" ? findPatenteInText(msg.text) : undefined;
@@ -222,6 +299,48 @@ export class ConsultaFlow {
     return emit({ kind: "text", text: CONSULTA.patenteInvalida(normalizePatente(msg.text).error ?? "Patente inválida.") });
   }
 
+  /** Logística: choferes cuyo nombre coincide (API 6, sin filtro de vigencia). */
+  private async buscarPorNombre(st: ConsultaState, texto: string, emit: Emit): Promise<void> {
+    const buscado = texto.replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    if (buscado.length < 3) return emit({ kind: "text", text: CONSULTA.nombreMuyCorto });
+    st.encontrados = undefined;
+    let encontrados: CodigoNombre[];
+    try {
+      await emit({ kind: "text", text: CONSULTA.buscandoNombre(buscado), sinPie: true });
+      encontrados = await this.deps.seawhite.buscarChoferes(buscado);
+    } catch (err) {
+      this.deps.logger.warn({ err }, "SEA WHITE no respondió la búsqueda por nombre");
+      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${this.textoAlgoMas(st)}`, FIN_CONSULTA);
+    }
+    // Sin resultados o demasiados: sigue esperando otro nombre (o un DNI).
+    if (!encontrados.length) return emit({ kind: "text", text: CONSULTA.sinCoincidenciasNombre(buscado) });
+    if (encontrados.length > MAX_ENCONTRADOS) return emit({ kind: "text", text: CONSULTA.demasiadosNombres(encontrados.length, buscado) });
+    st.encontrados = encontrados;
+    return this.menuEncontrados(st, emit, buscado);
+  }
+
+  /** Choferes encontrados: el nombre como opción y el DNI debajo (para los homónimos). */
+  private menuEncontrados(st: ConsultaState, emit: Emit, buscado?: string): Promise<void> {
+    const lista = st.encontrados ?? [];
+    const opciones = titulos(lista, (c) => nombreCompleto(c.nombre) || c.nombre || c.codigo).map((b, i) => ({
+      ...b,
+      payload: `hn:${lista[i]!.codigo}`,
+      description: `DNI ${lista[i]!.codigo}`,
+    }));
+    const encabezado = CONSULTA.elegirEncontrado(lista.length, buscado);
+    return emitirMenu(emit, opciones, {
+      una: (esLista) => (esLista ? `${encabezado}\n${aclaracionLista}` : encabezado),
+      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
+    });
+  }
+
+  /** Eligió a uno de los encontrados: sigue como si hubiera escrito su DNI. */
+  private elegirEncontrado(st: ConsultaState, dni: string, emit: Emit): Promise<void> {
+    if (!st.encontrados?.some((c) => c.codigo === dni)) return this.retomar(st, emit);
+    st.modo = "chofer";
+    return this.buscarClientes(st, "chofer", dni, emit);
+  }
+
   /** DNI o patente -> clientes donde está habilitado (API 1 / 7). */
   private async buscarClientes(st: ConsultaState, tipo: TipoRegistro, identificador: string, emit: Emit): Promise<void> {
     this.olvidarHabilitacion(st);
@@ -232,7 +351,7 @@ export class ConsultaFlow {
       clientes = await this.deps.seawhite.clientesHabilitados(tipo, identificador);
     } catch (err) {
       this.deps.logger.warn({ err }, "SEA WHITE no respondió los clientes habilitados");
-      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMas}`, FIN_CONSULTA);
+      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${this.textoAlgoMas(st)}`, FIN_CONSULTA);
     }
     // Sin habilitaciones vigentes: sigue esperando otro DNI o patente.
     if (!clientes.length) return emit({ kind: "text", text: CONSULTA.sinHabilitaciones(tipo, identificador) });
@@ -270,7 +389,7 @@ export class ConsultaFlow {
       subclientes = await this.deps.seawhite.subclientesHabilitados(tipo, st.identificador, cliente.codigo);
     } catch (err) {
       this.deps.logger.warn({ err }, "SEA WHITE no respondió los subclientes habilitados");
-      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMas}`, FIN_CONSULTA);
+      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${this.textoAlgoMas(st)}`, FIN_CONSULTA);
     }
     if (subclientes.length === 1) return this.elegirOperadora(st, subclientes[0]!.codigo, emit, subclientes);
     if (!subclientes.length) {
@@ -346,7 +465,7 @@ export class ConsultaFlow {
     const texto = respuestaConsulta({ tipo, identificador, nombre, plantas: linea ? [linea] : [], sinCredencialEn: linea ? undefined : destino, hoy });
     const otroCliente = (st.habilitados?.length ?? 0) > 1 ? [BOTON_OTRO_CLIENTE] : [];
 
-    if (seawhiteId === null) return emit({ kind: "buttons", text: `${texto}\n\n${CONSULTA.algoMas}`, buttons: otroCliente.length ? [BOTON_MENU, BOTON_CONSULTA, ...otroCliente] : FIN_CONSULTA });
+    if (seawhiteId === null) return emit({ kind: "buttons", text: `${texto}\n\n${this.textoAlgoMas(st)}`, buttons: otroCliente.length ? [BOTON_MENU, BOTON_CONSULTA, ...otroCliente] : FIN_CONSULTA });
     st.ultimos = [{ tipo, identificador, clienteCodigo, plantaCodigo: plantaCodigo!, etiqueta: destino, seawhiteId }];
     // Resultado y pregunta en UN mensaje: separados, WhatsApp a veces entregaba la pregunta primero.
     return emit({
@@ -359,7 +478,7 @@ export class ConsultaFlow {
   /** Manda el carnet de la ÚLTIMA consulta, con el ID que vino en ella (nunca otro DNI). */
   private async enviarCarnet(st: ConsultaState, emit: Emit): Promise<void> {
     const c = st.ultimos?.[0];
-    if (!c || c.seawhiteId === null) return this.algoMas(emit, CONSULTA.algoMas, FIN_CONSULTA);
+    if (!c || c.seawhiteId === null) return this.algoMas(emit, this.textoAlgoMas(st), FIN_CONSULTA);
     try {
       const pdf = await this.deps.seawhite.descargarPdf(c.tipo, c.seawhiteId);
       await emit({ kind: "file", filename: `${c.identificador}.pdf`, data: pdf, caption: `📄 Carnet – ${c.etiqueta}` });
@@ -367,7 +486,114 @@ export class ConsultaFlow {
       this.deps.logger.error({ err }, "No se pudo traer el PDF del carnet");
       await emit({ kind: "text", text: CONSULTA.carnetNoDisponible, sinPie: true });
     }
-    return this.algoMas(emit, CONSULTA.algoMas, (st.habilitados?.length ?? 0) > 1 ? [BOTON_MENU, BOTON_CONSULTA, BOTON_OTRO_CLIENTE] : FIN_CONSULTA);
+    return this.algoMas(emit, this.textoAlgoMas(st), (st.habilitados?.length ?? 0) > 1 ? [BOTON_MENU, BOTON_CONSULTA, BOTON_OTRO_CLIENTE] : FIN_CONSULTA);
+  }
+
+  // --- Logística: listados grupales en PDF -------------------------------------------
+
+  private tipoListado(st: ConsultaState): TipoRegistro {
+    return st.modo === "dominio" ? "dominio" : "chofer";
+  }
+
+  /** Repite el paso del listado: qué listado, qué cliente o qué operadora. */
+  private retomarListado(st: ConsultaState, emit: Emit): Promise<void> {
+    if (st.modo !== "chofer" && st.modo !== "dominio") return emit({ kind: "buttons", text: CONSULTA.menuGrupal, buttons: MENU_GRUPAL });
+    const l = st.listado;
+    if (l?.cliente && l.subclientes?.length) return this.menuSubclientesListado(st, emit);
+    if (l?.clientes?.length) return this.menuClientesListado(st, emit);
+    return this.iniciarListado(st, emit);
+  }
+
+  /** Mensaje escrito durante el listado: el cliente u operadora por su nombre, o repetir la pregunta. */
+  private pasoListado(st: ConsultaState, msg: IncomingMessage, emit: Emit): Promise<void> {
+    const l = st.listado;
+    if (l?.cliente && l.subclientes?.length) {
+      const s = elegidoPorTexto(msg.text, l.subclientes);
+      if (s) return this.elegirSubclienteListado(st, s.codigo, emit);
+    } else if (l?.clientes?.length) {
+      const c = elegidoPorTexto(msg.text, l.clientes);
+      if (c) return this.elegirClienteListado(st, c.codigo, emit);
+    }
+    return this.retomarListado(st, emit);
+  }
+
+  /** Clientes con choferes (API 3) o dominios (API 9) vigentes. */
+  private async iniciarListado(st: ConsultaState, emit: Emit): Promise<void> {
+    const tipo = this.tipoListado(st);
+    let clientes: CodigoNombre[];
+    try {
+      clientes = await this.deps.seawhite.clientesConVigentes(tipo);
+    } catch (err) {
+      this.deps.logger.warn({ err }, "SEA WHITE no respondió los clientes del listado");
+      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
+    }
+    if (!clientes.length) return this.algoMas(emit, `${CONSULTA.listadoSinClientes(tipo)}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
+    st.listado = { clientes: [...clientes].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")) };
+    return this.menuClientesListado(st, emit);
+  }
+
+  private menuClientesListado(st: ConsultaState, emit: Emit): Promise<void> {
+    const clientes = st.listado?.clientes ?? [];
+    const opciones = titulos(clientes, (c) => nombreCorto(c.nombre)).map((b, i) => ({ ...b, payload: `gc:${clientes[i]!.codigo}` }));
+    const encabezado = CONSULTA.listadoElegirCliente(this.tipoListado(st));
+    return emitirMenu(emit, opciones, {
+      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
+      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
+    });
+  }
+
+  /** Eligió el cliente -> operadoras con vigentes (API 4 / 10). Con una sola, directo al PDF. */
+  private async elegirClienteListado(st: ConsultaState, codigo: string, emit: Emit): Promise<void> {
+    const cliente = st.listado?.clientes?.find((c) => c.codigo === codigo);
+    if (!cliente) return this.retomar(st, emit);
+    st.listado = { ...st.listado, cliente, subclientes: undefined };
+    let subclientes: CodigoNombre[];
+    try {
+      subclientes = await this.deps.seawhite.subclientesConVigentes(this.tipoListado(st), cliente.codigo);
+    } catch (err) {
+      this.deps.logger.warn({ err }, "SEA WHITE no respondió las operadoras del listado");
+      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
+    }
+    if (!subclientes.length) return this.algoMas(emit, `${CONSULTA.listadoVacio}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
+    if (subclientes.length === 1) return this.generarListado(st, cliente, subclientes[0]!, emit);
+    st.listado.subclientes = subclientes;
+    return this.menuSubclientesListado(st, emit);
+  }
+
+  private menuSubclientesListado(st: ConsultaState, emit: Emit): Promise<void> {
+    const subs = st.listado?.subclientes ?? [];
+    const opciones = titulos(subs, (s) => s.nombre).map((b, i) => ({ ...b, payload: `gs:${subs[i]!.codigo}` }));
+    const encabezado = CONSULTA.elegirOperadoraHabilitada(st.listado?.cliente?.nombre ?? "");
+    return emitirMenu(emit, opciones, {
+      una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
+      varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
+    });
+  }
+
+  private elegirSubclienteListado(st: ConsultaState, codigo: string, emit: Emit): Promise<void> {
+    const cliente = st.listado?.cliente;
+    const sub = st.listado?.subclientes?.find((s) => s.codigo === codigo);
+    if (!cliente || !sub) return this.retomar(st, emit);
+    return this.generarListado(st, cliente, sub, emit);
+  }
+
+  /** Todos los vigentes (API 5 / 11) -> PDF, con el resumen como epígrafe (no se desordena). */
+  private async generarListado(st: ConsultaState, cliente: CodigoNombre, sub: CodigoNombre, emit: Emit): Promise<void> {
+    const tipo = this.tipoListado(st);
+    const hoy = todayInTimeZone(this.deps.timezone, this.deps.now());
+    st.listado = undefined; // el próximo [📋 Otro listado] arranca de cero
+    try {
+      await emit({ kind: "text", text: CONSULTA.armandoListado, sinPie: true });
+      const filas = await this.deps.seawhite.listadoVigentes(tipo, cliente.codigo, sub.codigo);
+      if (!filas.length) return this.algoMas(emit, `${CONSULTA.listadoVacio}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
+      const datos = { tipo, cliente: cliente.nombre, subcliente: sub.nombre, filas, hoy };
+      const pdf = await generarListadoPdf({ ...datos, generado: ahoraTexto(this.deps.timezone, this.deps.now()), bot: this.deps.botName });
+      await emit({ kind: "file", filename: nombreArchivoListado(tipo, cliente.nombre, hoy), data: pdf, caption: resumenListado(datos) });
+    } catch (err) {
+      this.deps.logger.error({ err }, "No se pudo armar el listado grupal");
+      return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
+    }
+    return this.algoMas(emit, CONSULTA.algoMasListado, FIN_LISTADO);
   }
 
   // --- VTV y seguro (sólo por dominio) ----------------------------------------------

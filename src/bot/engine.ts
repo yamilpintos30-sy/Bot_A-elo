@@ -17,7 +17,7 @@ import { detectarComando, esSoloCortesia, PIE } from "./comandos.js";
 import { ConsultaFlow } from "./consultaFlow.js";
 import type { BotDeps } from "./deps.js";
 import { DESPEDIDA, NO_HABILITADO } from "./texts.js";
-import type { IncomingMessage, Outbound, Session } from "./types.js";
+import type { IncomingMessage, Outbound, Perfil, Session } from "./types.js";
 
 /** Canal de salida (Chatwoot en producción; un array en los tests). */
 export interface Channel {
@@ -85,16 +85,29 @@ export class BotEngine {
     // le avisa UNA vez que no está habilitado y después no se le responde más.
     // Si la lista no se puede leer, silencio (no se le dice "no habilitado" a
     // alguien que quizás sí lo está).
+    // Si está en más de una lista gana la más completa: carga > logística > choferes.
+    let perfil: Perfil = "chofer";
     if (!esCargador) {
-      const puedeConsultar = await deps.consultores.contiene(msg.phone).catch((err) => {
-        deps.logger.error({ err }, "No se pudo leer la lista de consultores; por seguridad no se responde");
+      // Si la lista de logística no se puede leer (p. ej. falta la tabla), se sigue
+      // con la de choferes: no puede dejar sin respuesta a los choferes.
+      const esLogistica = await deps.logistica.contiene(msg.phone).catch((err) => {
+        deps.logger.error({ err }, "No se pudo leer la lista de logística");
         return null;
       });
-      if (puedeConsultar === null) return;
-      if (!puedeConsultar) return this.noHabilitado(session, msg);
+      if (esLogistica) perfil = "logistica";
+      else {
+        const puedeConsultar = await deps.consultores.contiene(msg.phone).catch((err) => {
+          deps.logger.error({ err }, "No se pudo leer la lista de consultores; por seguridad no se responde");
+          return null;
+        });
+        if (puedeConsultar === null) return;
+        // Sin poder leer logística, no se le dice "no habilitado" a alguien que quizás lo está.
+        if (!puedeConsultar) return esLogistica === null ? undefined : this.noHabilitado(session, msg);
+      }
     }
     session.avisoNoHabilitado = undefined;
     session.rol = esCargador ? "cargador" : "consulta";
+    session.perfil = esCargador ? undefined : perfil;
 
     const payload = this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined);
     session.botones = [];

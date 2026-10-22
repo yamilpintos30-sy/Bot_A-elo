@@ -28,6 +28,7 @@ import {
   SeaWhiteError,
   type CodigoNombre,
   type Consulta,
+  type FilaListado,
   type Documentacion,
   type RegistroCarga,
   type ResumenCarga,
@@ -102,24 +103,64 @@ export class AneloClient {
     return this.listaCodigos(path, "subclientes", "subcliente");
   }
 
+  /** Choferes por nombre (API 6): coincidencia parcial, mínimo 3 letras, SIN filtro de vigencia. */
+  async buscarChoferes(texto: string): Promise<CodigoNombre[]> {
+    const limpio = texto.normalize("NFC").replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    if (limpio.length < 3) return [];
+    return this.listaCodigos(`/api/VencimientosAnelo/buscar-choferes/${encodeURIComponent(limpio)}`, "choferes", "chofer");
+  }
+
+  /** Clientes con algún chofer (API 3) o dominio (API 9) vigente. */
+  async clientesConVigentes(tipo: TipoRegistro): Promise<CodigoNombre[]> {
+    return this.listaCodigos(tipo === "chofer" ? "/api/VencimientosAnelo/clientes-habilitados" : "/api/VencimientosAnelo/clientes-habilitados-dominio", "clientes", "cliente");
+  }
+
+  /** Subclientes de un cliente con algún chofer (API 4) o dominio (API 10) vigente. */
+  async subclientesConVigentes(tipo: TipoRegistro, cliente: string): Promise<CodigoNombre[]> {
+    const cli = encodeURIComponent(cliente);
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/subclientes-habilitados/${cli}` : `/api/VencimientosAnelo/subclientes-habilitados-dominio/${cli}`;
+    return this.listaCodigos(path, "subclientes", "subcliente");
+  }
+
+  /** Todos los choferes (API 5) o dominios (API 11) vigentes de un cliente y subcliente. */
+  async listadoVigentes(tipo: TipoRegistro, cliente: string, subcliente: string): Promise<FilaListado[]> {
+    const cli = encodeURIComponent(cliente);
+    const sub = encodeURIComponent(subcliente);
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/choferes-habilitados/${cli}/${sub}` : `/api/VencimientosAnelo/dominios-habilitados/${cli}/${sub}`;
+    const items = await this.listaCruda(path, tipo === "chofer" ? "choferes" : "dominios");
+    return items
+      .map((i) => ({
+        identificador: String((tipo === "chofer" ? i.chofer : i.dominio) ?? "").trim(),
+        nombre: tipo === "chofer" ? String(i.razon_social ?? i.razon_Social ?? i.Razon_Social ?? "").trim() || null : null,
+        tipoVehiculo: tipo === "dominio" ? String(i.tipo ?? "").trim() || null : null,
+        vencimiento: String(i.vencimiento ?? "").trim(),
+      }))
+      .filter((f) => f.identificador !== "");
+  }
+
   /**
    * Listas del manual: { ok, cantidad, <lista>: [{ <campo>: "000015", razon_social: "..." }] }.
    * Sin coincidencias la API responde 200 con la lista vacía. Los códigos quedan como
    * texto, con sus ceros a la izquierda.
    */
   private async listaCodigos(path: string, lista: string, campo: string): Promise<CodigoNombre[]> {
+    return (await this.listaCruda(path, lista))
+      .map((i) => ({
+        codigo: String(i[campo] ?? "").trim(),
+        nombre: String(i.razon_social ?? i.razon_Social ?? i.Razon_Social ?? "").trim(),
+      }))
+      .filter((c) => c.codigo !== "");
+  }
+
+  /** GET de una lista del manual: 404 o lista vacía = sin coincidencias; error o formato raro = excepción. */
+  private async listaCruda(path: string, lista: string): Promise<Array<Record<string, unknown>>> {
     const res = await this.request("GET", path);
     if (res.status === 404) return [];
     if (!res.ok) throw new SeaWhiteError(`SEA WHITE respondió HTTP ${res.status} a ${path}`, res.status);
     const body = (await this.safeJson(res)) as Record<string, unknown>;
     const items = body[lista];
     if (body.ok === false || !Array.isArray(items)) throw new SeaWhiteError(`Respuesta inesperada de SEA WHITE en ${path}`);
-    return items
-      .map((i: Record<string, unknown>) => ({
-        codigo: String(i[campo] ?? "").trim(),
-        nombre: String(i.razon_social ?? i.razon_Social ?? i.Razon_Social ?? "").trim(),
-      }))
-      .filter((c) => c.codigo !== "");
+    return items as Array<Record<string, unknown>>;
   }
 
   /**

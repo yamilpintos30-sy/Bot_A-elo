@@ -290,6 +290,62 @@ describe("consultas", () => {
     expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/../../x")).toThrow(/BLOQUEADO/);
   });
 
+  it("logística: APIs 3 a 6 y 9 a 11 con los JSON del manual", async () => {
+    const f = fakeFetch((call) => {
+      const path = new URL(call.url).pathname;
+      const clientes = [{ cliente: "000015", razon_social: "ALFA TRANSPORTES S.A." }];
+      const subclientes = [{ subcliente: "000003", razon_social: "DEPOSITO CENTRAL" }];
+      switch (path) {
+        case "/api/VencimientosAnelo/clientes-habilitados":
+        case "/api/VencimientosAnelo/clientes-habilitados-dominio":
+          return Response.json({ ok: true, cantidad: 1, clientes });
+        case "/api/VencimientosAnelo/subclientes-habilitados/000015":
+        case "/api/VencimientosAnelo/subclientes-habilitados-dominio/000015":
+          return Response.json({ ok: true, cliente: "000015", cantidad: 1, subclientes });
+        case "/api/VencimientosAnelo/choferes-habilitados/000015/000003":
+          return Response.json({ ok: true, cantidad: 1, choferes: [{ chofer: "28345678", razon_social: "GOMEZ JUAN", vencimiento: "15-12-2026" }] });
+        case "/api/VencimientosAnelo/dominios-habilitados/000015/000003":
+          return Response.json({ ok: true, cantidad: 2, dominios: [{ dominio: "AA123BB", tipo: "Camion", vencimiento: "15-12-2026" }, { dominio: "AC789EF", tipo: "Acoplado", vencimiento: "30-03-2027" }] });
+        case "/api/VencimientosAnelo/buscar-choferes/G%C3%93MEZ%20JUAN":
+          return Response.json({ ok: true, busqueda: "GÓMEZ JUAN", cantidad: 1, choferes: [{ chofer: "28345678", razon_social: "GOMEZ JUAN" }] });
+        default:
+          return new Response(`no: ${path}`, { status: 500 });
+      }
+    });
+    const c = client(f.fn, { cargaHabilitada: false });
+    const alfa = [{ codigo: "000015", nombre: "ALFA TRANSPORTES S.A." }];
+    const deposito = [{ codigo: "000003", nombre: "DEPOSITO CENTRAL" }];
+    expect(await c.clientesConVigentes("chofer")).toEqual(alfa);
+    expect(await c.clientesConVigentes("dominio")).toEqual(alfa);
+    expect(await c.subclientesConVigentes("chofer", "000015")).toEqual(deposito);
+    expect(await c.subclientesConVigentes("dominio", "000015")).toEqual(deposito);
+    expect(await c.listadoVigentes("chofer", "000015", "000003")).toEqual([{ identificador: "28345678", nombre: "GOMEZ JUAN", tipoVehiculo: null, vencimiento: "15-12-2026" }]);
+    expect(await c.listadoVigentes("dominio", "000015", "000003")).toEqual([
+      { identificador: "AA123BB", nombre: null, tipoVehiculo: "Camion", vencimiento: "15-12-2026" },
+      { identificador: "AC789EF", nombre: null, tipoVehiculo: "Acoplado", vencimiento: "30-03-2027" },
+    ]);
+    // Búsqueda: se limpian los símbolos y los espacios van codificados en la URL.
+    expect(await c.buscarChoferes("  gómez, juan!! ".toUpperCase())).toEqual([{ codigo: "28345678", nombre: "GOMEZ JUAN" }]);
+    expect(await c.buscarChoferes("go")).toEqual([]); // menos de 3 letras: ni sale a la red
+  });
+
+  it("logística: sólo GET en la lista blanca, con códigos numéricos", () => {
+    for (const p of [
+      "/api/VencimientosAnelo/clientes-habilitados",
+      "/api/VencimientosAnelo/subclientes-habilitados/000015",
+      "/api/VencimientosAnelo/choferes-habilitados/000015/000003",
+      "/api/VencimientosAnelo/buscar-choferes/GOMEZ%20JUAN",
+      "/api/VencimientosAnelo/clientes-habilitados-dominio",
+      "/api/VencimientosAnelo/subclientes-habilitados-dominio/000015",
+      "/api/VencimientosAnelo/dominios-habilitados/000015/000003",
+    ]) {
+      expect(assertAllowedEndpoint("GET", p)).toEqual({ writes: false });
+      expect(() => assertAllowedEndpoint("POST", p)).toThrow(/BLOQUEADO/);
+    }
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/choferes-habilitados/../x")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/buscar-choferes/a/b")).toThrow(/BLOQUEADO/);
+  });
+
   it("las consultas funcionan aunque la carga esté deshabilitada", async () => {
     const f = fakeFetch(() => new Response(PDF, { headers: { "Content-Type": "application/pdf" } }));
     const pdf = await client(f.fn, { cargaHabilitada: false }).descargarPdf("dominio", 5);

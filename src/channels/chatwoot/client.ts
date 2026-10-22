@@ -42,7 +42,7 @@ export class ChatwootClient {
     const created = await this.post(`/conversations/${conversationId}/messages`, {
       content: text,
       content_type: "input_select",
-      content_attributes: { items: buttons.map((b) => ({ title: b.title, value: b.payload })) },
+      content_attributes: { items: buttons.map((b) => ({ title: b.title, value: b.payload, ...(b.description ? { description: b.description.slice(0, 72) } : {}) })) },
       message_type: "outgoing",
       private: false,
     });

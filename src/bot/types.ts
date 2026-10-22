@@ -31,6 +31,8 @@ export interface IncomingMessage {
 export interface ButtonSpec {
   title: string;
   payload: string;
+  /** Segunda línea de una opción de LISTA (máx. 72). Con descripción, WhatsApp la muestra como lista. */
+  description?: string;
 }
 
 /** Lo que el bot quiere enviar, en orden. El canal lo traduce a Chatwoot. */
@@ -43,6 +45,11 @@ export type Outbound =
   | { kind: "image"; caption: string };
 
 export type Rol = "cargador" | "consulta";
+/**
+ * Quién consulta (rol "consulta"): chofer (lista de choferes) o logística (lista de
+ * logística, con búsqueda por nombre y listados grupales). En la base queda como "consulta".
+ */
+export type Perfil = "chofer" | "logistica";
 
 /** Estado del flujo de carga (cargadores). */
 export interface CargadorState {
@@ -81,17 +88,29 @@ export interface CarnetConsultado {
 /** Estado del flujo de consultas (choferes). Sesiones viejas pueden traer campos que ya no se usan. */
 export interface ConsultaState {
   saludado: boolean;
+  /** Perfil con el que se armó este estado: si el número cambia de lista, se empieza de cero. */
+  perfil?: Perfil;
   /**
    * Rama elegida en el menú principal:
-   *   habilitacion -> por DNI o por dominio -> clientes donde está habilitado -> elegir uno
-   *   vehiculo     -> VTV o seguro por patente
+   *   habilitacion -> por DNI / dominio (logística: también por nombre) -> clientes -> elegir uno
+   *   vehiculo     -> VTV o seguro por patente (sólo choferes)
+   *   grupal       -> listado en PDF de choferes o dominios de un cliente (sólo logística)
    */
-  rama?: "habilitacion" | "vehiculo";
+  rama?: "habilitacion" | "vehiculo" | "grupal";
   /**
-   *   chofer / dominio -> habilitación por DNI o por patente
+   *   chofer / dominio -> habilitación por DNI o por patente (en grupal: qué listado)
+   *   nombre           -> logística: buscar al chofer por nombre (API 6) y seguir como por DNI
    *   vtv / seguro     -> comprobante del vehículo por patente
    */
-  modo?: "chofer" | "dominio" | "vtv" | "seguro";
+  modo?: "chofer" | "dominio" | "nombre" | "vtv" | "seguro";
+  /** Búsqueda por nombre: choferes encontrados (codigo = DNI). */
+  encontrados?: Array<{ codigo: string; nombre: string }>;
+  /** Listado grupal: clientes y subclientes con vigentes, y lo elegido. */
+  listado?: {
+    clientes?: Array<{ codigo: string; nombre: string }>;
+    cliente?: { codigo: string; nombre: string };
+    subclientes?: Array<{ codigo: string; nombre: string }>;
+  };
   /** Habilitación: DNI o patente consultado y los clientes donde está habilitado (API 1 / 7). */
   identificador?: string;
   habilitados?: Array<{ codigo: string; nombre: string }>;
@@ -112,6 +131,8 @@ export interface Session {
   conversationId: string;
   phone: string | null;
   rol: Rol;
+  /** Rol consulta: chofer o logística (lo decide el motor en cada mensaje con las listas). */
+  perfil?: Perfil;
   cargador?: CargadorState;
   consulta?: ConsultaState;
   /** Botones del último mensaje: la respuesta llega como el TÍTULO del botón. */

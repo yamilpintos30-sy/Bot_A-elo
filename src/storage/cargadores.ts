@@ -14,7 +14,7 @@ export interface ListaTelefonos {
   reemplazar(phones: string[]): Promise<void>;
 }
 
-export type TablaTelefonos = "anelo_cargadores" | "anelo_consultores";
+export type TablaTelefonos = "anelo_cargadores" | "anelo_consultores" | "anelo_logistica";
 
 const CACHE_MS = 30_000;
 

@@ -56,7 +56,7 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 |---|---|
 | 1. Base: configuración, cliente de SEA WHITE con candados, tests | ✅ |
 | 2. Extractor de carnets | ✅ probado con los 4 PDF de ejemplo: 52 de 52 correctos, ~US$ 0,03 por carnet |
-| 4. WhatsApp: webhook, filtro de inbox, anti-eco, flujo del chofer (Javier) | ✅ código y tests · ⏳ prueba real |
+| 4. WhatsApp: webhook, filtro de inbox, anti-eco, flujo del chofer (Puerto White) | ✅ código y tests · ⏳ prueba real |
 | 5. Flujo del cargador con botón Confirmar (modo prueba 9999xx) | ✅ código y tests · ⏳ prueba real |
 | 3. Panel: contexto, análisis, cargadores (.txt), clientes y plantas, registro | ⏳ |
 | 6. Barra de pestañas en el panel de Enri | ⏳ |
@@ -71,7 +71,7 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 5. Resumen, **[Confirmar carga] [Cancelar]**, carga en SEA WHITE, resultado y vuelve al menú.
 
 **Choferes** (cualquier otro número):
-1. Saludo cordial con la imagen de Javier (`WELCOME_IMAGE`, por defecto `assets/javier.jpg`; sin imagen, sale solo texto).
+1. Saludo cordial con la imagen de Puerto White (`WELCOME_IMAGE`, por defecto `assets/javier.jpg`; sin imagen, sale solo texto).
 2. **Menú principal:** **[🪪 Por DNI] [🚛 Por dominio] [📄 VTV] [🛡️ Seguro] [Eso es todo, gracias]**. Con más de 3 opciones, WhatsApp lo muestra como lista.
 3. **Por DNI y por dominio (credencial de ingreso):**
    - Se pide **cliente y subcliente** primero, porque un DNI o una patente puede estar en varias plantas. Después, el DNI o la patente.

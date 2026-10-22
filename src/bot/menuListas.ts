@@ -25,7 +25,9 @@ export const variasListas = (listas: number) => `👇 Están en ${listas} listas
 export const rangoLista = (n: number, total: number, desde: string, hasta: string) => `📋 Lista ${n} de ${total}: *${desde}* a *${hasta}*`;
 
 export async function emitirMenu(emit: Emit, opciones: ButtonSpec[], textos: TextosMenu): Promise<void> {
-  if (opciones.length <= MAX_OPCIONES) return emit({ kind: "buttons", text: textos.una(opciones.length > 3), buttons: opciones });
+  // Con más de 3 opciones, o alguna con descripción, WhatsApp la muestra como lista.
+  const esLista = opciones.length > 3 || opciones.some((o) => o.description);
+  if (opciones.length <= MAX_OPCIONES) return emit({ kind: "buttons", text: textos.una(esLista), buttons: opciones });
   const tandas: ButtonSpec[][] = [];
   for (let i = 0; i < opciones.length; i += MAX_OPCIONES) tandas.push(opciones.slice(i, i + MAX_OPCIONES));
   for (const [i, tanda] of tandas.entries()) {

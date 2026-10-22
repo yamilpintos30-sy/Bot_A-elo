@@ -26,6 +26,9 @@ const CARGADOR = "+5492914413200";
 const CHOFER = "+5492995551234";
 /** Números habilitados para consultar (la app es cerrada). */
 const CONSULTORES = ["2995551234", "2994440000"];
+/** Teléfono de logística (lista aparte). */
+const LOGISTICA_TEL = "+5492996667777";
+const LOGISTICA = ["2996667777"];
 const HOY = new Date("2026-10-15T12:00:00-03:00");
 
 const CLIENTES: Cliente[] = [
@@ -74,6 +77,41 @@ class FakeSeaWhite implements SeaWhiteService {
     const codigos = [...new Set([...this.datos.keys()].map((k) => k.split("|")).filter(([t, c, , i]) => t === tipo && c === cliente && i === id).map(([, , sub]) => sub!))];
     const planta = (sub: string) => CLIENTES.find((x) => x.codigo === cliente)?.plantas.find((pl) => pl.codigo === sub)?.nombre ?? sub;
     return codigos.map((sub) => ({ codigo: sub, nombre: planta(sub) }));
+  }
+  /** Padrón de choferes para la búsqueda por nombre (API 6): DNI -> "APELLIDO NOMBRE". */
+  personas = new Map<string, string>([
+    ["33615617", "OJEDA BORIS DANIEL"],
+    ["29642599", "ASTORGA FABIO ALEJANDRO"],
+    ["30111222", "PEREZ JUAN"],
+    ["30333444", "PEREZ JUAN"],
+  ]);
+  /** Tipo de vehículo de cada dominio (API 11). */
+  tiposVehiculo = new Map<string, string>([["AF498ZJ", "Camion"], ["AH488DG", "Acoplado"]]);
+  async buscarChoferes(texto: string) {
+    const t = texto.toUpperCase();
+    return [...this.personas.entries()].filter(([, n]) => n.includes(t)).map(([dni, nombre]) => ({ codigo: dni, nombre }));
+  }
+  private filasDe(tipo: TipoRegistro) {
+    return [...this.datos.entries()].map(([k, v]) => ({ k: k.split("|"), v })).filter(({ k }) => k[0] === tipo);
+  }
+  async clientesConVigentes(tipo: TipoRegistro) {
+    const codigos = [...new Set(this.filasDe(tipo).map(({ k }) => k[1]!))];
+    return codigos.map((c) => ({ codigo: c, nombre: CLIENTES.find((x) => x.codigo === c)?.nombre ?? c }));
+  }
+  async subclientesConVigentes(tipo: TipoRegistro, cliente: string) {
+    const codigos = [...new Set(this.filasDe(tipo).filter(({ k }) => k[1] === cliente).map(({ k }) => k[2]!))];
+    const planta = (sub: string) => CLIENTES.find((x) => x.codigo === cliente)?.plantas.find((pl) => pl.codigo === sub)?.nombre ?? sub;
+    return codigos.map((sub) => ({ codigo: sub, nombre: planta(sub) }));
+  }
+  async listadoVigentes(tipo: TipoRegistro, cliente: string, sub: string) {
+    return this.filasDe(tipo)
+      .filter(({ k }) => k[1] === cliente && k[2] === sub)
+      .map(({ k, v }) => ({
+        identificador: k[3]!,
+        nombre: tipo === "chofer" ? (this.personas.get(k[3]!) ?? null) : null,
+        tipoVehiculo: tipo === "dominio" ? (this.tiposVehiculo.get(k[3]!) ?? "Camion") : null,
+        vencimiento: v.vencimiento,
+      }));
   }
   async documentacion(tipo: TipoRegistro) {
     return tipo === "chofer"
@@ -131,6 +169,7 @@ function setup(opts: { procesar?: ProcesarFn; verificacion?: Partial<ResultadoVe
     catalogo: new MemoryCatalogo(CLIENTES),
     cargadores: new MemoryListaTelefonos(["2914413200"]),
     consultores: new MemoryListaTelefonos(CONSULTORES),
+    logistica: new MemoryListaTelefonos(LOGISTICA),
     registro,
     sessions: new MemorySessions(),
     log: new NoopMessageLog(),
@@ -1033,6 +1072,152 @@ async function enDniPie(say: Awaited<ReturnType<typeof setup>>["say"]) {
   await say(CHOFER, "hola");
   await say(CHOFER, "🪪 Habilitación");
 }
+
+describe("logística", () => {
+  const MENU_LOG = ["🔎 Individual", "📋 Grupal", "Eso es todo, gracias"];
+  const MENU_IND = ["🪪 Por DNI", "👤 Por nombre", "🚛 Por dominio"];
+  const MENU_GRU = ["👤 Choferes", "🚛 Dominios", "🏠 Menú principal"];
+  const FIN_LISTADO = ["🏠 Menú principal", "📋 Otro listado", "Eso es todo, gracias"];
+  const L = (say: Awaited<ReturnType<typeof setup>>["say"], text: string) => say(LOGISTICA_TEL, text, [], "c-log");
+
+  it("saluda con su propio menú: Individual / Grupal (sin VTV y seguro)", async () => {
+    const { say } = setup();
+    let outs = await L(say, "hola");
+    expect(outs[0]!.kind).toBe("image");
+    expect(texts(outs)).toMatch(/Individual\*: un chofer o un vehículo, por DNI, nombre o dominio[\s\S]*Grupal\*: el listado en PDF/);
+    expect(buttons(outs)).toEqual(MENU_LOG);
+    outs = await L(say, "vtv");
+    expect(buttons(outs)).toEqual(MENU_LOG); // VTV y seguro no es de logística
+  });
+
+  it("Individual -> Por DNI: igual que la consulta de choferes", async () => {
+    const { say } = setup();
+    await cargar(say, "👤 Choferes");
+    await L(say, "hola");
+    let outs = await L(say, "🔎 Individual");
+    expect(texts(outs)).toMatch(/Cómo querés buscar/);
+    expect(buttons(outs)).toEqual(MENU_IND);
+    await L(say, "🪪 Por DNI");
+    outs = await L(say, "33615617");
+    expect(buttons(outs)).toEqual(["Total Austral"]);
+    outs = await L(say, "Total Austral");
+    expect(texts(outs)).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026/);
+    outs = await L(say, "No, gracias");
+    expect(texts(outs)).toMatch(/Otra habilitación\*: otro DNI, nombre o dominio[\s\S]*consultas individuales o grupales/);
+  });
+
+  it("Por nombre: homónimos con el DNI debajo; al elegir sigue como por DNI", async () => {
+    const { say } = setup();
+    await L(say, "hola");
+    await L(say, "🔎 Individual");
+    let outs = await L(say, "👤 Por nombre");
+    expect(texts(outs)).toMatch(/Escribí el \*apellido\* del chofer/);
+
+    outs = await L(say, "perez");
+    expect(texts(outs)).toMatch(/Encontré \*2\* choferes con "\*perez\*"\.\n¿Cuál es\?\n👇 Tocá el botón de abajo/);
+    const menu = outs.find((o) => o.kind === "buttons") as Extract<Outbound, { kind: "buttons" }>;
+    // Mismo nombre: el título lleva el DNI para distinguirlos, y la descripción también.
+    expect(menu.buttons.map((b) => [b.title, b.description])).toEqual([
+      ["30111222 Perez Juan", "DNI 30111222"],
+      ["30333444 Perez Juan", "DNI 30333444"],
+    ]);
+
+    outs = await L(say, "30333444 Perez Juan");
+    expect(texts(outs)).toMatch(/No encontré habilitaciones vigentes para el DNI \*30333444\*/);
+  });
+
+  it("Por nombre: elige a uno con habilitación y ve sus clientes", async () => {
+    const { say } = setup();
+    await cargar(say, "👤 Choferes");
+    await L(say, "hola");
+    await L(say, "🔎 Individual");
+    await L(say, "👤 Por nombre");
+    let outs = await L(say, "ojeda");
+    expect(buttons(outs)).toEqual(["Ojeda Boris Daniel"]);
+    outs = await L(say, "Ojeda Boris Daniel");
+    expect(texts(outs)).toMatch(/DNI \*33615617\*: habilitado en \*1\* cliente/);
+    expect(buttons(outs)).toEqual(["Total Austral"]);
+  });
+
+  it("Por nombre: muy corto, sin resultados, demasiados, o un DNI escrito directo", async () => {
+    const { say, seawhite } = setup();
+    await cargar(say, "👤 Choferes");
+    await L(say, "hola");
+    await L(say, "🔎 Individual");
+    await L(say, "👤 Por nombre");
+    expect(texts(await L(say, "pe"))).toMatch(/al menos 3 letras/);
+    expect(texts(await L(say, "zzzz"))).toMatch(/No encontré choferes con "\*zzzz\*"/);
+    seawhite.buscarChoferes = async () => Array.from({ length: 31 }, (_, i) => ({ codigo: String(30000000 + i), nombre: "GOMEZ X" }));
+    expect(texts(await L(say, "gomez"))).toMatch(/Encontré \*31\* choferes.*demasiados/s);
+    expect(buttons(await L(say, "33615617"))).toEqual(["Total Austral"]);
+  });
+
+  it("Grupal -> Choferes -> cliente -> PDF con el resumen como epígrafe", async () => {
+    const { say } = setup();
+    await cargar(say, "👤 Choferes");
+    await L(say, "hola");
+    let outs = await L(say, "📋 Grupal");
+    expect(texts(outs)).toMatch(/Qué listado necesitás/);
+    expect(buttons(outs)).toEqual(MENU_GRU);
+    outs = await L(say, "👤 Choferes");
+    expect(texts(outs)).toMatch(/Listado de \*choferes\* habilitados\.\n¿De qué cliente\?/);
+    expect(buttons(outs)).toEqual(["Total Austral"]);
+
+    // Una sola operadora: va directo al PDF.
+    outs = await L(say, "Total Austral");
+    const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
+    expect(file.filename).toBe("Choferes_TOTAL_AUSTRAL_2026-10-15.pdf");
+    expect(file.data.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(file.caption).toBe("📋 *Choferes habilitados*\n*TOTAL AUSTRAL – Planta 1*\n👤 2 choferes\n⚠️ 1 vence en los próximos 7 días");
+    const pdf = await PDFDocument.load(file.data);
+    expect(pdf.getPageCount()).toBe(1);
+    expect(buttons(outs)).toEqual(FIN_LISTADO);
+
+    outs = await L(say, "📋 Otro listado");
+    expect(buttons(outs)).toEqual(MENU_GRU);
+  });
+
+  it("Grupal -> Dominios: con varias operadoras las pregunta; camiones y acoplados en el resumen", async () => {
+    const { say } = setup({ procesar: async () => resultado([carnet("AF498ZJ", "31-12-2026", { tipo: "dominio", apellidoNombre: null }), carnet("AH488DG", "31-12-2026", { tipo: "dominio", apellidoNombre: null })]) });
+    await cargar(say, "🚛 Dominios", "Total Austral", "Planta 1");
+    await cargar(say, "🚛 Dominios", "Total Austral", "Planta 2");
+    await L(say, "hola");
+    await L(say, "📋 Grupal");
+    await L(say, "🚛 Dominios");
+    let outs = await L(say, "Total Austral");
+    expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    outs = await L(say, "Planta 2");
+    const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
+    expect(file.caption).toBe("📋 *Dominios habilitados*\n*TOTAL AUSTRAL – Planta 2*\n🚛 2 dominios (1 camión, 1 acoplado)");
+  });
+
+  it("los choferes no tienen búsqueda por nombre ni listados", async () => {
+    const { say } = setup();
+    await say(CHOFER, "hola");
+    let outs = await say(CHOFER, "grupal");
+    expect(buttons(outs)).toEqual(["🪪 Habilitación", "📄 VTV y seguro", "Eso es todo, gracias"]);
+    await say(CHOFER, "🪪 Habilitación");
+    outs = await say(CHOFER, "por nombre");
+    expect(buttons(outs)).toEqual(["🪪 Por DNI", "🚛 Por dominio", "🏠 Menú principal"]);
+  });
+
+  it("si un número está en logística y en choferes, ve el menú de logística", async () => {
+    const { say, deps } = setup();
+    await deps.consultores.reemplazar([...CONSULTORES, "2996667777"]);
+    const outs = await L(say, "hola");
+    expect(buttons(outs)).toEqual(MENU_LOG);
+  });
+
+  it("si la lista de logística no se puede leer, los choferes siguen siendo atendidos", async () => {
+    const { say, deps } = setup();
+    deps.logistica = { contiene: async () => Promise.reject(new Error("falta la tabla")), listar: async () => [], reemplazar: async () => undefined };
+    const outs = await say(CHOFER, "hola");
+    expect(buttons(outs)).toEqual(["🪪 Habilitación", "📄 VTV y seguro", "Eso es todo, gracias"]);
+    // Y a un número desconocido no se le dice "no habilitado" (podría ser de logística): silencio.
+    expect(await say("+5491155550000", "hola", [], "c-x")).toEqual([]);
+  });
+});
 
 describe("pie y cierre (como Enri)", () => {
   it("un texto suelto cierra con [Menú 😊] [Eso es todo, gracias] en el mismo mensaje", async () => {
