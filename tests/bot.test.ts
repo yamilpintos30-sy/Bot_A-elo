@@ -853,7 +853,7 @@ describe("chofer", () => {
     const { say } = setup();
     const outs = await say(CHOFER, "hola");
     // Mismo saludo que Enri; el teléfono del chofer está en SEA WHITE: lo saluda por el nombre.
-    expect(outs[0]).toEqual({ kind: "image", caption: "¡Hola, Boris Daniel Ojeda! 👋 Soy *Javier*, el asistente virtual de *SEA WHITE S.A.*" });
+    expect(outs[0]).toEqual({ kind: "image", caption: "¡Hola, Boris Daniel Ojeda! 👋 Soy el asistente virtual de *JAVIER*." });
     expect(texts(outs)).toMatch(/Habilitación.*VTV y seguro/s);
     expect(buttons(outs)).toEqual(MENU);
   });
@@ -861,7 +861,7 @@ describe("chofer", () => {
   it("si el teléfono no está en SEA WHITE, saluda sin nombre (como Enri)", async () => {
     const { say } = setup();
     const outs = await say("+5492994440000", "hola", [], "c9");
-    expect(outs[0]).toEqual({ kind: "image", caption: "¡Hola! 👋 Soy *Javier*, el asistente virtual de *SEA WHITE S.A.*" });
+    expect(outs[0]).toEqual({ kind: "image", caption: "¡Hola! 👋 Soy el asistente virtual de *JAVIER*." });
   });
 
   it("Habilitación -> Por DNI -> DNI -> clientes donde está habilitado -> elige -> vencimiento -> carnet", async () => {
@@ -880,12 +880,12 @@ describe("chofer", () => {
     outs = await say(CHOFER, "33.615.617");
     expect(texts(outs)).toMatch(/Buscando dónde está habilitado el DNI \*33615617\*/);
     expect(texts(outs)).toMatch(/👤 DNI \*33615617\*: habilitado en \*1\* cliente\.\nℹ️ Si no ves el cliente, es porque \*NO estás habilitado\*\.\n¿Cuál querés ver\?/);
-    expect(buttons(outs)).toEqual(["Total Austral"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Eso es todo, gracias"]);
 
     // La operadora se elige del menú aunque haya una sola (como en la carga).
     outs = await say(CHOFER, "Total Austral");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["Planta 1"]);
+    expect(buttons(outs)).toEqual(["Planta 1", "Eso es todo, gracias"]);
     outs = await say(CHOFER, "Planta 1");
     const t = texts(outs);
     expect(t).toMatch(/PERSONA 33615617/);
@@ -914,7 +914,7 @@ describe("chofer", () => {
 
     let outs = await say(CHOFER, "33615617");
     expect(texts(outs)).toMatch(/habilitado en \*2\* clientes/);
-    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy", "Eso es todo, gracias"]);
 
     await say(CHOFER, "Vista Energy");
     outs = await say(CHOFER, "Planta 1");
@@ -922,10 +922,10 @@ describe("chofer", () => {
     expect(buttons(outs)).toEqual([...CARNET, "🏢 Otro cliente"]);
 
     outs = await say(CHOFER, "🏢 Otro cliente");
-    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy", "Eso es todo, gracias"]);
     outs = await say(CHOFER, "Total Austral");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2", "Eso es todo, gracias"]);
     outs = await say(CHOFER, "Planta 2");
     expect(texts(outs)).toMatch(/TOTAL AUSTRAL – Planta 2: ⚠️ habilitado/);
 
@@ -948,7 +948,7 @@ describe("chofer", () => {
     // Algo que no coincide repite la lista.
     await say(CHOFER, "🏢 Otro cliente");
     outs = await say(CHOFER, "shell");
-    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy", "Eso es todo, gracias"]);
   });
 
   it("sin habilitaciones vigentes lo dice y sigue esperando otro DNI", async () => {
@@ -958,7 +958,7 @@ describe("chofer", () => {
     let outs = await say(CHOFER, "30123456");
     expect(texts(outs)).toMatch(/No encontré habilitaciones vigentes para el DNI \*30123456\*\.\nRevisá el número y escribilo de nuevo\./);
     outs = await say(CHOFER, "33615617");
-    expect(buttons(outs)).toEqual(["Total Austral"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Eso es todo, gracias"]);
   });
 
   it("Por dominio: patente -> cliente -> habilitación del vehículo", async () => {
@@ -980,7 +980,7 @@ describe("chofer", () => {
     await say(CHOFER, "hola");
     await say(CHOFER, "🪪 Habilitación");
     const outs = await say(CHOFER, "33615617");
-    expect(buttons(outs)).toEqual(["Total Austral"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Eso es todo, gracias"]);
   });
 
   it("[🔎 Consulta] vuelve a [Por DNI] [Por dominio]; [Menú 😊] al menú principal", async () => {
@@ -1012,9 +1012,12 @@ describe("chofer", () => {
     await enHabilitacion(say, "🪪 Por DNI");
     const outs = await say(CHOFER, "33615617");
     const listas = outs.filter((o) => o.kind === "buttons") as Array<Extract<Outbound, { kind: "buttons" }>>;
-    expect(listas.map((l) => l.buttons.length)).toEqual([10, 2]);
+    expect(listas.map((l) => l.buttons.length)).toEqual([10, 2, 1]);
     expect(listas[0]!.text).toMatch(/habilitado en \*12\* clientes\.\nℹ️ .*NO estás habilitado.*\n¿Cuál querés ver\?\n👇 Están en 2 listas/);
     expect(listas[1]!.text).toBe("📋 Lista 2 de 2 de clientes");
+    // Y aparte, para irse (no entra en las listas): después de que se entreguen.
+    expect(listas[2]).toEqual({ kind: "buttons", text: "O si no, podés terminar la consulta.", buttons: [{ title: "Eso es todo, gracias", payload: "fin" }] });
+    expect(listas.map((l) => Boolean(l.esperarEntrega))).toEqual([true, true, false]);
   });
 
   it("si SEA WHITE no responde, lo avisa sin cortar la conversación", async () => {
@@ -1043,7 +1046,7 @@ describe("chofer", () => {
     await say(CHOFER, "No, gracias"); // queda en [Menú] [Otra habilitación] [Eso es todo]
     // El buffer los une en un texto de tres renglones: antes contestaba "No encontré un número de DNI".
     const outs = await say(CHOFER, "🔎 Otra habilitación\n🏠 Menú principal\nEso es todo, gracias");
-    expect(texts(outs)).toMatch(/Gracias por comunicarte con SEA WHITE/);
+    expect(texts(outs)).toMatch(/Gracias por comunicarte con PUERTO WHITE/);
     expect(texts(outs)).not.toMatch(/DNI/);
   });
 
@@ -1158,17 +1161,15 @@ describe("logística", () => {
     expect(buttons(outs)).toEqual(MENU_IND);
     await L(say, "🪪 Por DNI");
     outs = await L(say, "33615617");
-    expect(buttons(outs)).toEqual(["Total Austral"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Eso es todo, gracias"]);
     await L(say, "Total Austral");
     outs = await L(say, "Planta 1");
-    // Logística no recibe el carnet: habilitación y "¿algo más?" en un mensaje.
-    expect(outs).toHaveLength(1);
-    expect(texts(outs)).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026[\s\S]*\n\n¿Necesitás algo más\?\n🔎 \*Otra habilitación\*: otro DNI, nombre o dominio[\s\S]*consultas individuales o grupales/);
-    expect(texts(outs)).not.toMatch(/carnet/i);
-    expect(buttons(outs)).toEqual(["🏠 Menú principal", "🔎 Otra habilitación", "Eso es todo, gracias"]);
-    // Aunque escriba el botón del carnet, no se manda.
+    // Logística también recibe el carnet en PDF, como los choferes.
+    expect(texts(outs)).toMatch(/TOTAL AUSTRAL – Planta 1: ⚠️ habilitado hasta 18\/10\/2026[\s\S]*¿Querés que te pase el carnet\?/);
+    expect(buttons(outs)).toEqual(["📄 Sí, pasámelo", "No, gracias"]);
     outs = await L(say, "📄 Sí, pasámelo");
-    expect(outs.some((o) => o.kind === "file")).toBe(false);
+    expect((outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>).data.toString()).toContain("33615617");
+    expect(texts(outs)).toMatch(/🔎 \*Otra habilitación\*: otro DNI, nombre o dominio[\s\S]*consultas individuales o grupales/);
   });
 
   it("Por nombre: homónimos con el DNI debajo; al elegir sigue como por DNI", async () => {
@@ -1198,10 +1199,10 @@ describe("logística", () => {
     await L(say, "🔎 Individual");
     await L(say, "👤 Por nombre");
     let outs = await L(say, "ojeda");
-    expect(buttons(outs)).toEqual(["Ojeda Boris Daniel"]);
+    expect(buttons(outs)).toEqual(["Ojeda Boris Daniel", "Eso es todo, gracias"]);
     outs = await L(say, "Ojeda Boris Daniel");
     expect(texts(outs)).toMatch(/DNI \*33615617\*: habilitado en \*1\* cliente/);
-    expect(buttons(outs)).toEqual(["Total Austral"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Eso es todo, gracias"]);
   });
 
   it("Por nombre: muy corto, sin resultados, demasiados, o un DNI escrito directo", async () => {
@@ -1214,7 +1215,7 @@ describe("logística", () => {
     expect(texts(await L(say, "zzzz"))).toMatch(/No encontré choferes con "\*zzzz\*"/);
     seawhite.buscarChoferes = async () => Array.from({ length: 31 }, (_, i) => ({ codigo: String(30000000 + i), nombre: "GOMEZ X" }));
     expect(texts(await L(say, "gomez"))).toMatch(/Encontré \*31\* choferes.*demasiados/s);
-    expect(buttons(await L(say, "33615617"))).toEqual(["Total Austral"]);
+    expect(buttons(await L(say, "33615617"))).toEqual(["Total Austral", "Eso es todo, gracias"]);
   });
 
   it("Grupal -> Choferes -> cliente -> PDF con el resumen como epígrafe", async () => {
@@ -1226,12 +1227,12 @@ describe("logística", () => {
     expect(buttons(outs)).toEqual(MENU_GRU);
     outs = await L(say, "👤 Choferes");
     expect(texts(outs)).toMatch(/Listado de \*choferes\* habilitados\.\n¿De qué cliente\?/);
-    expect(buttons(outs)).toEqual(["Total Austral"]);
+    expect(buttons(outs)).toEqual(["Total Austral", "Eso es todo, gracias"]);
 
     // La operadora se elige del menú aunque haya una sola.
     outs = await L(say, "Total Austral");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["Planta 1"]);
+    expect(buttons(outs)).toEqual(["Planta 1", "Eso es todo, gracias"]);
     outs = await L(say, "Planta 1");
     const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
     expect(file.filename).toBe("Choferes_TOTAL_AUSTRAL_2026-10-15.pdf");
@@ -1254,7 +1255,7 @@ describe("logística", () => {
     await L(say, "🚛 Dominios");
     let outs = await L(say, "Total Austral");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2", "Eso es todo, gracias"]);
     outs = await L(say, "Planta 2");
     const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
     expect(file.caption).toBe("📋 *Dominios habilitados*\n*TOTAL AUSTRAL – Planta 2*\n🚛 2 dominios (1 camión, 1 acoplado)");
@@ -1300,7 +1301,7 @@ describe("pie y cierre (como Enri)", () => {
     const { say } = setup();
     await say(CHOFER, "hola");
     let outs = await say(CHOFER, "Eso es todo, gracias");
-    expect(texts(outs)).toMatch(/Gracias por comunicarte con SEA WHITE/);
+    expect(texts(outs)).toMatch(/Gracias por comunicarte con PUERTO WHITE/);
     expect(buttons(outs)).toEqual([]);
     outs = await say(CHOFER, "gracias!"); // cortesía tras el cierre: silencio
     expect(outs).toEqual([]);
@@ -1339,10 +1340,10 @@ describe("app cerrada: sólo responde a los números de las listas", () => {
     expect(outs).toHaveLength(1);
     expect(outs[0]).toMatchObject({ kind: "text" });
     expect(texts(outs)).toBe(
-      "Este servicio es de uso exclusivo para personal autorizado de Sea White S.A.\n" +
+      "Este servicio es de uso exclusivo para personal autorizado de Puerto White S.A.\n" +
         "El número de teléfono desde el cual se está comunicando no se encuentra habilitado para utilizar este servicio.\n" +
         "Si considera que debería tener acceso, comuníquese con el administrador del sistema.\n" +
-        "*Sea White S.A.*",
+        "*Puerto White S.A.*",
     );
     expect(buttons(outs)).toEqual([]); // sin botones
     expect(await say("+5491155550000", "33615617", [], "c-desconocido")).toEqual([]);

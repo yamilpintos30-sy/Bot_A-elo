@@ -64,10 +64,10 @@ const MENU_INDIVIDUAL: ButtonSpec[] = [
 const MENU_GRUPAL: ButtonSpec[] = [{ title: "👤 Choferes", payload: "g:chofer" }, { title: "🚛 Dominios", payload: "g:dominio" }, BOTON_MENU];
 const FIN_LISTADO: ButtonSpec[] = [BOTON_MENU, { title: "📋 Otro listado", payload: "r:grupal" }, BOTON_FIN];
 /**
- * Logística no recibe el carnet (pedido de Yamil, 22-oct-2026): ve la habilitación y
- * sigue. Queda desactivado, no borrado: con `true` vuelve a ofrecerse [📄 Sí, pasámelo].
+ * ¿Logística recibe el carnet en PDF? Se apagó y se volvió a pedir el mismo día
+ * (22-oct-2026): con `false` ve la habilitación y sigue, sin [📄 Sí, pasámelo].
  */
-const LOGISTICA_OFRECE_CARNET = false;
+const LOGISTICA_OFRECE_CARNET = true;
 /** Búsqueda por nombre: con más resultados se pide algo más preciso. */
 const MAX_ENCONTRADOS = 30;
 
@@ -672,6 +672,8 @@ export class ConsultaFlow {
       una: (lista) => (lista ? `${encabezado}\n${aclaracionLista}` : encabezado),
       varias: (listas) => `${encabezado}\n${variasListas(listas)}`,
       deQue,
+      // Siempre a mano la salida: en el mismo mensaje si entra, si no aparte.
+      cierre: { boton: BOTON_FIN, texto: CONSULTA.oTerminar },
     });
   }
 

@@ -23,6 +23,12 @@ export interface TextosMenu {
   varias: (listas: number) => string;
   /** Qué hay en las listas, en plural: "📋 Lista 1 de 3 de *clientes*". */
   deQue: string;
+  /**
+   * Botón para irse ([Eso es todo, gracias]): con 1 o 2 opciones va en el mismo
+   * mensaje; si no hay lugar (3 botones o una lista), en un mensaje aparte con
+   * este texto, después de que se entregue el menú.
+   */
+  cierre?: { boton: ButtonSpec; texto: string };
 }
 
 export const aclaracionLista = "👇 Tocá el botón de abajo para ver la lista.";
@@ -32,18 +38,25 @@ export const numeroDeLista = (n: number, total: number, deQue: string) => `📋 
 export async function emitirMenu(emit: Emit, opciones: ButtonSpec[], textos: TextosMenu): Promise<void> {
   // Con más de 3 opciones, o alguna con descripción, WhatsApp la muestra como lista.
   const esLista = opciones.length > 3 || opciones.some((o) => o.description);
-  if (opciones.length <= MAX_OPCIONES) return emit({ kind: "buttons", text: textos.una(esLista), buttons: opciones });
-  const tandas: ButtonSpec[][] = [];
-  for (let i = 0; i < opciones.length; i += MAX_OPCIONES) tandas.push(opciones.slice(i, i + MAX_OPCIONES));
-  for (const [i, tanda] of tandas.entries()) {
-    const numero = numeroDeLista(i + 1, tandas.length, textos.deQue);
-    await emit({
-      kind: "buttons",
-      text: i === 0 ? `${textos.varias(tandas.length)}\n\n${numero}` : numero,
-      buttons: tanda,
-      esperarEntrega: i < tandas.length - 1,
-    });
+  const { cierre } = textos;
+  // Hay lugar para el botón de cierre en el mismo mensaje (hasta 3 botones).
+  if (cierre && !esLista && opciones.length < 3) return emit({ kind: "buttons", text: textos.una(false), buttons: [...opciones, cierre.boton] });
+  if (opciones.length <= MAX_OPCIONES) {
+    await emit({ kind: "buttons", text: textos.una(esLista), buttons: opciones, esperarEntrega: Boolean(cierre) });
+  } else {
+    const tandas: ButtonSpec[][] = [];
+    for (let i = 0; i < opciones.length; i += MAX_OPCIONES) tandas.push(opciones.slice(i, i + MAX_OPCIONES));
+    for (const [i, tanda] of tandas.entries()) {
+      const numero = numeroDeLista(i + 1, tandas.length, textos.deQue);
+      await emit({
+        kind: "buttons",
+        text: i === 0 ? `${textos.varias(tandas.length)}\n\n${numero}` : numero,
+        buttons: tanda,
+        esperarEntrega: i < tandas.length - 1 || Boolean(cierre),
+      });
+    }
   }
+  if (cierre) await emit({ kind: "buttons", text: cierre.texto, buttons: [cierre.boton] });
 }
 
 /**

@@ -10,7 +10,7 @@ export function createApp(c: Pick<Container, "config" | "engine" | "echo" | "log
   app.use(express.json({ limit: "2mb" }));
 
   app.get("/", (_req, res) => {
-    res.type("html").send(`<h1>${c.config.BOT_NAME} — Vencimientos Añelo (SEA WHITE)</h1><p>El servicio está funcionando.</p>`);
+    res.type("html").send(`<h1>${c.config.BOT_NAME} — Vencimientos Añelo (Puerto White)</h1><p>El servicio está funcionando.</p>`);
   });
 
   app.get("/health", (_req, res) => {

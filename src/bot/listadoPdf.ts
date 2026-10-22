@@ -106,7 +106,7 @@ interface Columna {
 export async function generarListadoPdf(d: DatosListado): Promise<Buffer> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(winAnsi(`${d.tipo === "chofer" ? "Choferes" : "Dominios"} habilitados - ${d.cliente}`));
-  pdf.setAuthor("SEA WHITE S.A.");
+  pdf.setAuthor(winAnsi(d.bot));
   const normal = await pdf.embedFont(StandardFonts.Helvetica);
   const negrita = await pdf.embedFont(StandardFonts.HelveticaBold);
 
@@ -130,7 +130,7 @@ export async function generarListadoPdf(d: DatosListado): Promise<Buffer> {
     p.drawText(t, { x, y: yy, size, font, color });
   };
 
-  const pie = (p: PDFPage, n: number) => texto(p, `${d.bot} · SEA WHITE S.A. · Generado el ${d.generado} · Página ${n}`, MARGEN, 22, normal, 8, GRIS);
+  const pie = (p: PDFPage, n: number) => texto(p, `${d.bot} · Generado el ${d.generado} · Página ${n}`, MARGEN, 22, normal, 8, GRIS);
 
   // Encabezado (sólo en la primera página).
   texto(pagina, d.tipo === "chofer" ? "Choferes habilitados" : "Dominios habilitados", MARGEN, y - 4, negrita, 18, AZUL);

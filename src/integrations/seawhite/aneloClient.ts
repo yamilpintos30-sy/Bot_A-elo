@@ -293,20 +293,20 @@ export class AneloClient {
       res = await this.request("POST", `/api/VencimientosAnelo/${tipo}`, { body: buildForm });
     } catch (err) {
       // Sin respuesta: no sabemos si se grabó. Se informa como error para revisar.
-      const mensaje = `Sin respuesta de SEA WHITE (${(err as Error).message}). Verificá con una consulta antes de reintentar.`;
+      const mensaje = `Sin respuesta del sistema (${(err as Error).message}). Verificá con una consulta antes de reintentar.`;
       return lote.map((r) => ({ identificador: r.identificador, ok: false, mensaje }));
     }
 
     const parsed = cargaResponseSchema.safeParse(await this.safeJson(res));
     if (!parsed.success) {
-      const mensaje = `Respuesta inesperada de SEA WHITE (HTTP ${res.status}). Verificá con una consulta.`;
+      const mensaje = `Respuesta inesperada del sistema (HTTP ${res.status}). Verificá con una consulta.`;
       return lote.map((r) => ({ identificador: r.identificador, ok: false, mensaje }));
     }
     const body = parsed.data;
     if (!body.resultados || body.resultados.length === 0) {
       // Error general (p. ej. lote rechazado entero). Sin detalle por registro
       // no se puede afirmar que algo se grabó: se informa como error.
-      const mensaje = body.mensaje ?? (body.ok ? "SEA WHITE no informó el resultado de cada registro. Verificá con una consulta." : `SEA WHITE rechazó el lote (HTTP ${res.status}).`);
+      const mensaje = body.mensaje ?? (body.ok ? "El sistema no informó el resultado de cada registro. Verificá con una consulta." : `El sistema rechazó el lote (HTTP ${res.status}).`);
       return lote.map((r) => ({ identificador: r.identificador, ok: false, mensaje }));
     }
 
@@ -314,7 +314,7 @@ export class AneloClient {
     // se cruza por identificador; si falta, por posición.
     return lote.map((r, i) => {
       const match = body.resultados!.find((x) => (tipo === "chofer" ? x.chofer : x.dominio) === r.identificador) ?? body.resultados![i];
-      if (!match) return { identificador: r.identificador, ok: false, mensaje: "SEA WHITE no informó el resultado de este registro." };
+      if (!match) return { identificador: r.identificador, ok: false, mensaje: "El sistema no informó el resultado de este registro." };
       return { identificador: r.identificador, ok: match.ok, accion: match.accion, id: match.id, mensaje: match.mensaje };
     });
   }

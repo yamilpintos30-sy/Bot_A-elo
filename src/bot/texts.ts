@@ -49,16 +49,16 @@ export function vigente(valor: string | null | undefined, hoy: CalendarDate): bo
 
 /** Se manda UNA vez por conversación; después, silencio. */
 export const NO_HABILITADO = [
-  "Este servicio es de uso exclusivo para personal autorizado de Sea White S.A.",
+  "Este servicio es de uso exclusivo para personal autorizado de Puerto White S.A.",
   "El número de teléfono desde el cual se está comunicando no se encuentra habilitado para utilizar este servicio.",
   "Si considera que debería tener acceso, comuníquese con el administrador del sistema.",
-  "*Sea White S.A.*",
+  "*Puerto White S.A.*",
 ].join("\n");
 
 // --- Cierre ("Eso es todo, gracias") ------------------------------------------------
 
 export const DESPEDIDA = {
-  consulta: "¡Gracias por comunicarte con SEA WHITE! Cuando necesites consultar un vencimiento, escribime. Saludos.",
+  consulta: "¡Gracias por comunicarte con PUERTO WHITE! Cuando necesites consultar un vencimiento, escribime. Saludos.",
   cargador: "Listo. Cuando tengas otra carga, escribime.",
   cargaCancelada: "Listo. La carga pendiente se canceló: no se cargó nada. Cuando tengas otra carga, escribime.",
   /** Cargador: 1 hora sin actividad, la sesión se cierra sola (el cliente queda libre). */
@@ -201,9 +201,9 @@ export function resultadoCarga(destino: string, resumen: ResumenCarga): string {
 const conPunto = (t: string) => (/[.!?]$/.test(t.trim()) ? t.trim() : `${t.trim()}.`);
 
 export const CONSULTA = {
-  /** Mismo saludo que Enri (con el nombre si se identificó el teléfono). */
+  /** Saludo (con el nombre si se identificó el teléfono): "Soy el asistente virtual de *PUERTO WHITE*." */
   saludo: (bot: string, nombre?: string | null) =>
-    nombre ? `¡Hola, ${nombre}! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*` : `¡Hola! 👋 Soy *${bot}*, el asistente virtual de *SEA WHITE S.A.*`,
+    `${nombre ? `¡Hola, ${nombre}! 👋` : "¡Hola! 👋"} Soy el asistente virtual de *${bot.toUpperCase()}*.`,
   /** Menú principal: dos ramas. */
   menuPrincipal: [
     "¿Qué querés consultar?",
@@ -253,6 +253,8 @@ export const CONSULTA = {
     "📋 *Grupal*: el listado en PDF de los choferes o dominios habilitados de un cliente.",
   ].join("\n"),
   menuIndividual: "¿Cómo querés buscar?",
+  /** Debajo de una lista de clientes u operadoras (no entra el botón en el mismo mensaje). */
+  oTerminar: "O si no, podés terminar la consulta.",
   algoMasLogistica: "¿Necesitás algo más?\n🔎 *Otra habilitación*: otro DNI, nombre o dominio.\n🏠 *Menú principal*: consultas individuales o grupales.",
   pedirNombre: "👤 Escribí el *apellido* del chofer (o apellido y nombre). Al menos 3 letras.",
   nombreMuyCorto: "❌ Escribí al menos 3 letras del apellido o del nombre.",
