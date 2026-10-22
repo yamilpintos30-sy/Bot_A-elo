@@ -25,9 +25,8 @@ import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaC
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
 const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
-const OTRO_CLIENTE: ButtonSpec = { title: "🔄 Otro cliente", payload: "otrocliente" };
-/** Después de una carga: otra del mismo cliente y operadora, otro cliente, o terminar. */
-const MENU_OTRA: ButtonSpec[] = [MENU_TIPO[0]!, MENU_TIPO[1]!, OTRO_CLIENTE, BOTON_FIN];
+/** Después de una carga: otra del mismo cliente y operadora, o terminar (para cambiar de cliente, "Eso es todo"). */
+const MENU_OTRA: ButtonSpec[] = MENU_TIPO;
 /** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
 const MAX_OPCIONES = 10;
 const POR_PAGINA = 8;
@@ -153,9 +152,9 @@ export class CargadorFlow {
   /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
   private menuOperadoras(cliente: Cliente, emit: Emit): Promise<void> {
     const plantas = cliente.plantas.slice(0, MAX_OPCIONES - 1);
-    if (!plantas.length) return emit({ kind: "buttons", text: `*${cliente.nombre}* no tiene operadoras cargadas.`, buttons: [OTRO_CLIENTE, BOTON_FIN] });
+    if (!plantas.length) return emit({ kind: "buttons", text: `*${cliente.nombre}* no tiene operadoras cargadas.`, buttons: [BOTON_MENU, BOTON_FIN] });
     const botones = titulos(plantas, (p) => p.nombre).map((b, i) => ({ ...b, payload: `pla:${plantas[i]!.codigo}` }));
-    return emit({ kind: "buttons", text: CARGA.elegirOperadora(cliente.nombre), buttons: [...botones, OTRO_CLIENTE] });
+    return emit({ kind: "buttons", text: CARGA.elegirOperadora(cliente.nombre), buttons: botones });
   }
 
   // --- Procesamiento ---------------------------------------------------------------

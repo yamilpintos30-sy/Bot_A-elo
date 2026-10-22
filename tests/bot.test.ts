@@ -230,7 +230,7 @@ describe("cargador", () => {
 
     outs = await say(CARGADOR, "Total Austral");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2", "🔄 Otro cliente"]);
+    expect(buttons(outs)).toEqual(["Planta 1", "Planta 2"]);
 
     outs = await say(CARGADOR, "Planta 1");
     expect(texts(outs)).toBe("*TOTAL AUSTRAL – Planta 1*\n¿Qué documentación vas a cargar?");
@@ -257,8 +257,8 @@ describe("cargador", () => {
     ]);
     expect(texts(outs)).toMatch(/Guardando 2 carnets en el sistema/);
     expect(texts(outs)).toMatch(/Carga completada.*2 cargados \(2 nuevos\)/s);
-    // Otra carga: mismo cliente y operadora, u otro cliente.
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
+    // Otra carga del mismo cliente y operadora, o terminar.
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
     expect(registro.carnets.map((c) => [c.identificador, c.seawhiteId])).toEqual([
       ["33615617", 1],
       ["29642599", 2],
@@ -280,19 +280,18 @@ describe("cargador", () => {
     ]);
   });
 
-  it("otra carga: mismo cliente y operadora con [Choferes]/[Dominios], o [🔄 Otro cliente]", async () => {
+  it("otra carga: mismo cliente y operadora con [Choferes]/[Dominios]; para cambiar de cliente, Eso es todo", async () => {
     const { say, procesar } = setup();
     await elegirCarga(say, "👤 Choferes");
     await say(CARGADOR, "", [pdfAdj()]);
     await say(CARGADOR, "Confirmar carga");
     let outs = await say(CARGADOR, "🚛 Dominios");
     expect(texts(outs)).toMatch(/\*TOTAL AUSTRAL – Planta 1\* – dominios.*Mandá el PDF/s); // no vuelve a preguntar cliente
-    await say(CARGADOR, "", [pdfAdj()]);
-    await say(CARGADOR, "Cancelar");
-    outs = await say(CARGADOR, "🔄 Otro cliente");
-    expect(texts(outs)).toBe("¿Qué *cliente* vas a cargar?");
+    await say(CARGADOR, "Eso es todo, gracias");
+    outs = await say(CARGADOR, "hola");
+    expect(texts(outs)).toMatch(/¿Qué \*cliente\* vas a cargar\?/);
     expect(buttons(outs)).toEqual(["Total Austral", "Vista Energy"]);
-    expect(procesar).toHaveBeenCalledTimes(2);
+    expect(procesar).toHaveBeenCalledTimes(1);
   });
 
   it("cliente con una sola operadora: igual se elige del menú", async () => {
@@ -300,7 +299,7 @@ describe("cargador", () => {
     await say(CARGADOR, "hola");
     const outs = await say(CARGADOR, "Vista Energy");
     expect(texts(outs)).toBe("*VISTA ENERGY*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["Planta 1", "🔄 Otro cliente"]);
+    expect(buttons(outs)).toEqual(["Planta 1"]);
   });
 
   it("escribir el cliente en vez de tocar el menú: se repite el menú (no se escribe nada)", async () => {
@@ -341,7 +340,7 @@ describe("cargador", () => {
     expect(buttons(outs)).toEqual(["⬅️ Anteriores", "Cliente 17", "Cliente 18", "Cliente 19"]);
     outs = await say(CARGADOR, "Cliente 18");
     expect(texts(outs)).toBe("*CLIENTE 18*\n¿Qué *operadora*?");
-    expect(buttons(outs)).toEqual(["OPERADORAS TODAS", "🔄 Otro cliente"]);
+    expect(buttons(outs)).toEqual(["OPERADORAS TODAS"]);
   });
 
   it("códigos de 4 dígitos (0001 / 0000) llegan tal cual a SEA WHITE", async () => {
@@ -462,7 +461,7 @@ describe("cargador", () => {
     await say(CARGADOR, "", [pdfAdj()]);
     const outs = await say(CARGADOR, "Cancelar");
     expect(texts(outs)).toMatch(/cancelada/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
     expect(seawhite.cargas).toHaveLength(0);
   });
 
@@ -578,7 +577,7 @@ describe("cargador", () => {
     await elegirCarga(say, "👤 Choferes");
     const outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/ningún carnet apto.*Carnet ilegible/s);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 
   it("si falla el procesamiento lo informa y vuelve al menú", async () => {
@@ -586,7 +585,7 @@ describe("cargador", () => {
     await elegirCarga(say, "👤 Choferes");
     const outs = await say(CARGADOR, "", [pdfAdj()]);
     expect(texts(outs)).toMatch(/No pude procesar el PDF: timeout de Claude/);
-    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "🔄 Otro cliente", "Eso es todo, gracias"]);
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
   });
 
   it("los cargadores no consultan: un DNI les abre el menú de carga", async () => {
