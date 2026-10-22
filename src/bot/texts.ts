@@ -93,7 +93,7 @@ export const CARGA = {
   /** Paso 3: tipo de documentación. */
   elegirTipo: (destino: string) => `*${destino}*\n¿Qué documentación vas a cargar?`,
   menu: "¿Qué documentación vas a cargar?",
-  otraCarga: "¿Querés cargar otra documentación?",
+  otraCarga: "¿Querés cargar más documentación de este cliente, o cambiar de cliente?",
   /** Mandó el archivo antes de terminar de elegir: se guarda y se sigue con lo que falta. */
   archivoEnEspera: "📎 Guardé el archivo. Primero elegí cliente, operadora y qué documentación es.",
   encontrado: (destino: string, tipo: "chofer" | "dominio") => `${TIPO[tipo].emoji} *${destino}* – ${TIPO[tipo].plural}\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,

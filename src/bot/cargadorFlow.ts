@@ -25,8 +25,8 @@ import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaC
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
 const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
-/** Después de una carga: otra del mismo cliente y operadora, o terminar (para cambiar de cliente, "Eso es todo"). */
-const MENU_OTRA: ButtonSpec[] = MENU_TIPO;
+/** Después de una carga: más del mismo cliente y operadora, cambiar de cliente, o terminar. */
+const MENU_OTRA: ButtonSpec[] = [MENU_TIPO[0]!, MENU_TIPO[1]!, { title: "🔄 Cambiar cliente", payload: "otrocliente" }, BOTON_FIN];
 /** WhatsApp muestra hasta 10 opciones por menú: con más clientes, de a páginas. */
 const MAX_OPCIONES = 10;
 const POR_PAGINA = 8;
