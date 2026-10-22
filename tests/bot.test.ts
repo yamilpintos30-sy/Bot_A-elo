@@ -1228,8 +1228,11 @@ describe("logística", () => {
     expect(texts(outs)).toMatch(/Listado de \*choferes\* habilitados\.\n¿De qué cliente\?/);
     expect(buttons(outs)).toEqual(["Total Austral"]);
 
-    // Una sola operadora: va directo al PDF.
+    // La operadora se elige del menú aunque haya una sola.
     outs = await L(say, "Total Austral");
+    expect(texts(outs)).toBe("*TOTAL AUSTRAL*\n¿Qué *operadora*?");
+    expect(buttons(outs)).toEqual(["Planta 1"]);
+    outs = await L(say, "Planta 1");
     const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
     expect(file.filename).toBe("Choferes_TOTAL_AUSTRAL_2026-10-15.pdf");
     expect(file.data.subarray(0, 5).toString()).toBe("%PDF-");

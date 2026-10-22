@@ -545,7 +545,7 @@ export class ConsultaFlow {
     return this.menu(emit, opciones, encabezado, "clientes");
   }
 
-  /** Eligió el cliente -> operadoras con vigentes (API 4 / 10). Con una sola, directo al PDF. */
+  /** Eligió el cliente -> operadoras con vigentes (API 4 / 10). Siempre se elige del menú. */
   private async elegirClienteListado(st: ConsultaState, codigo: string, emit: Emit): Promise<void> {
     const cliente = st.listado?.clientes?.find((c) => c.codigo === codigo);
     if (!cliente) return this.retomar(st, emit);
@@ -558,7 +558,7 @@ export class ConsultaFlow {
       return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
     }
     if (!subclientes.length) return this.algoMas(emit, `${CONSULTA.listadoVacio}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
-    if (subclientes.length === 1) return this.generarListado(st, cliente, subclientes[0]!, emit);
+    // La operadora se elige del menú aunque haya una sola (como en la carga y la consulta individual).
     st.listado.subclientes = subclientes;
     return this.menuSubclientesListado(st, emit);
   }
