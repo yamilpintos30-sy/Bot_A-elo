@@ -75,7 +75,7 @@ export class CargadorFlow {
     const nuevo = !session.cargador;
     const st: CargadorState = (session.cargador ??= { etapa: "esperando_datos" });
 
-    if (st.etapa === "esperando_confirmacion") return this.enConfirmacion(session, st, payload, emit);
+    if (st.etapa === "esperando_confirmacion") return this.enConfirmacion(session, st, payload, emit, msg);
 
     const clientes = await this.deps.catalogo.listar();
 
@@ -246,7 +246,7 @@ export class CargadorFlow {
     return emit({ kind: "buttons", text: resumenParaConfirmar(lote.destino, delTipo, lote.resultado.rechazados), buttons: [CONFIRMAR, CANCELAR] });
   }
 
-  private async enConfirmacion(session: Session, st: CargadorState, payload: string | undefined, emit: Emit): Promise<void> {
+  private async enConfirmacion(session: Session, st: CargadorState, payload: string | undefined, emit: Emit, msg?: IncomingMessage): Promise<void> {
     const lote = this.deps.lotes.obtener(st.loteId);
     if (!lote) {
       // Expiró (o el bot se reinició): no se cargó nada y queda registrado así.
@@ -296,6 +296,13 @@ export class CargadorFlow {
     // Cualquier otra cosa: se repite la pregunta pendiente con SUS botones
     // (si el PDF era del otro tipo, vuelve el aviso con "Cargar ..." / "Cancelar").
     if (!hayDelTipo) return this.mostrarResumen(lote, emit);
+    // El MISMO archivo otra vez (reenviado o mandado de nuevo mientras se procesaba): se ignora,
+    // el resumen con [Confirmar carga] ya está en el chat.
+    const repetido = msg && !msg.text.trim() && msg.attachments.length > 0 && msg.attachments.every((a) => nombreArchivo(a) === lote.archivo);
+    if (repetido) {
+      this.deps.logger.info({ archivo: lote.archivo }, "Mismo archivo mientras espera la confirmación: se ignora");
+      return;
+    }
     return emit({ kind: "buttons", text: CARGA.pendiente, buttons: [CONFIRMAR, CANCELAR] });
   }
 

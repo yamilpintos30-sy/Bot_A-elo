@@ -541,6 +541,16 @@ describe("cargador", () => {
     expect(procesar).toHaveBeenCalledTimes(1);
   });
 
+  it("el MISMO archivo de nuevo mientras espera el Confirmar se ignora (sin mensaje)", async () => {
+    const { say, procesar, seawhite } = setup();
+    await elegirCarga(say, "👤 Choferes");
+    await say(CARGADOR, "", [pdfAdj()]);
+    expect(await say(CARGADOR, "", [pdfAdj()])).toEqual([]); // mismo carnets.pdf: nada
+    expect(procesar).toHaveBeenCalledTimes(1);
+    await say(CARGADOR, "Confirmar carga"); // y la confirmación sigue funcionando
+    expect(seawhite.cargas).toHaveLength(1);
+  });
+
   it("rechaza adjuntos que no son PDF ni fotos (audio, video)", async () => {
     const { say } = setup();
     await say(CARGADOR, "👤 Choferes");
