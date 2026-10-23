@@ -19,7 +19,7 @@
  *        por nombre: al menos 3 letras -> choferes que coinciden (API 6, con el
  *        DNI debajo para distinguir a los homónimos) -> elige -> sigue como por DNI
  *   📋 Grupal -> [Choferes] [Dominios] -> cliente (API 3 / 9) -> operadora (4 / 10)
- *        -> PDF con todos los vigentes (5 / 11) y el resumen como epígrafe
+ *        -> Excel con todos los vigentes (5 / 11) y el resumen como epígrafe
  *
  * Los clientes salen de SEA WHITE, no de la tabla del bot: sólo aparecen
  * aquellos donde ese DNI o esa patente tienen habilitación vigente.
@@ -33,6 +33,7 @@ import { nombreCorto } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU, PIE } from "./comandos.js";
 import type { BotDeps, Emit } from "./deps.js";
 import { aclaracionLista, emitirMenu, titulos, variasListas } from "./menuListas.js";
+import { generarListadoExcel, MIME_XLSX } from "./listadoExcel.js";
 import { generarListadoPdf, nombreArchivoListado, resumenListado } from "./listadoPdf.js";
 import { CONSULTA, respuestaConsulta, type LineaPlanta } from "./texts.js";
 import type { ButtonSpec, ConsultaState, IncomingMessage, Perfil, Session } from "./types.js";
@@ -68,6 +69,11 @@ const FIN_LISTADO: ButtonSpec[] = [BOTON_MENU, { title: "📋 Otro listado", pay
  * (22-oct-2026): con `false` ve la habilitación y sigue, sin [📄 Sí, pasámelo].
  */
 const LOGISTICA_OFRECE_CARNET = true;
+/**
+ * Formato de los listados grupales: Excel (pedido de Yamil, 23-oct-2026). El PDF
+ * queda hecho: con "pdf" vuelve a mandarse ése, con el mismo contenido.
+ */
+const FORMATO_LISTADO: "excel" | "pdf" = "excel";
 /** Búsqueda por nombre: con más resultados se pide algo más preciso. */
 const MAX_ENCONTRADOS = 30;
 
@@ -587,8 +593,12 @@ export class ConsultaFlow {
       const filas = await this.deps.seawhite.listadoVigentes(tipo, cliente.codigo, sub.codigo);
       if (!filas.length) return this.algoMas(emit, `${CONSULTA.listadoVacio}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);
       const datos = { tipo, cliente: cliente.nombre, subcliente: sub.nombre, filas, hoy };
-      const pdf = await generarListadoPdf({ ...datos, generado: ahoraTexto(this.deps.timezone, this.deps.now()), bot: this.deps.botName });
-      await emit({ kind: "file", filename: nombreArchivoListado(tipo, cliente.nombre, hoy), data: pdf, caption: resumenListado(datos) });
+      const completo = { ...datos, generado: ahoraTexto(this.deps.timezone, this.deps.now()), bot: this.deps.botName };
+      const archivo =
+        FORMATO_LISTADO === "excel"
+          ? { data: await generarListadoExcel(completo), filename: nombreArchivoListado(tipo, cliente.nombre, hoy, "xlsx"), mime: MIME_XLSX }
+          : { data: await generarListadoPdf(completo), filename: nombreArchivoListado(tipo, cliente.nombre, hoy, "pdf"), mime: "application/pdf" };
+      await emit({ kind: "file", ...archivo, caption: resumenListado(datos) });
     } catch (err) {
       this.deps.logger.error({ err }, "No se pudo armar el listado grupal");
       return this.algoMas(emit, `${CONSULTA.consultaNoDisponible}\n\n${CONSULTA.algoMasListado}`, FIN_LISTADO);

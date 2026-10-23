@@ -250,7 +250,7 @@ export const CONSULTA = {
   menuLogistica: [
     "¿Qué tipo de consulta querés hacer?",
     "🔎 *Individual*: un chofer o un vehículo, por DNI, nombre o dominio.",
-    "📋 *Grupal*: el listado en PDF de los choferes o dominios habilitados de un cliente.",
+    "📋 *Grupal*: el listado en Excel de los choferes o dominios habilitados de un cliente.",
   ].join("\n"),
   menuIndividual: "¿Cómo querés buscar?",
   /** Debajo de una lista de clientes u operadoras (no entra el botón en el mismo mensaje). */
@@ -265,7 +265,7 @@ export const CONSULTA = {
   menuGrupal: "¿Qué listado necesitás?",
   listadoElegirCliente: (tipo: "chofer" | "dominio") => `📋 Listado de *${tipo === "chofer" ? "choferes" : "dominios"}* habilitados.\n¿De qué cliente?`,
   listadoSinClientes: (tipo: "chofer" | "dominio") => `No hay clientes con ${tipo === "chofer" ? "choferes" : "dominios"} habilitados en este momento.`,
-  armandoListado: "⏳ Armando el listado en PDF…",
+  armandoListado: "⏳ Armando el listado en Excel…",
   listadoVacio: "No hay registros vigentes para ese cliente y operadora.",
   algoMasListado: "¿Necesitás algo más?\n📋 *Otro listado*: de otro cliente, o el de choferes o dominios.\n🏠 *Menú principal*: consultas individuales o grupales.",
 };

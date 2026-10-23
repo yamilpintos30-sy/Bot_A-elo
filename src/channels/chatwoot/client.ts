@@ -52,12 +52,12 @@ export class ChatwootClient {
   }
 
   /** Archivo PDF con epígrafe. Devuelve el id del mensaje (para esperar su entrega). */
-  async sendFile(conversationId: string, filename: string, data: Buffer, caption = ""): Promise<string | null> {
+  async sendFile(conversationId: string, filename: string, data: Buffer, caption = "", mime = "application/pdf"): Promise<string | null> {
     this.opts.echo.recordText(conversationId, caption || filename);
     const form = new FormData();
     form.append("content", caption);
     form.append("message_type", "outgoing");
-    form.append("attachments[]", new Blob([new Uint8Array(data)], { type: "application/pdf" }), filename);
+    form.append("attachments[]", new Blob([new Uint8Array(data)], { type: mime }), filename);
     const created = await this.send(`/conversations/${conversationId}/messages`, form);
     this.opts.echo.recordId(created.id);
     return created.id !== undefined ? String(created.id) : null;

@@ -44,12 +44,12 @@ const winAnsi = (s: string) =>
     .replace(/\s{2,}/g, " ")
     .trim();
 
-const fecha = (v: string) => {
+export const fecha = (v: string) => {
   const d = parseCalendarDate(v);
   return d ? `${String(d.day).padStart(2, "0")}/${String(d.month).padStart(2, "0")}/${d.year}` : v;
 };
 
-function estado(v: string, hoy: CalendarDate): { texto: string; alerta: boolean } {
+export function estado(v: string, hoy: CalendarDate): { texto: string; alerta: boolean } {
   const d = parseCalendarDate(v);
   if (!d) return { texto: "sin fecha", alerta: true };
   const dias = diffDays(hoy, d);
@@ -60,7 +60,7 @@ function estado(v: string, hoy: CalendarDate): { texto: string; alerta: boolean 
 }
 
 /** Grupos de vehículos en el orden en que vienen ("Camion" -> "Camión"). */
-function gruposVehiculos(filas: FilaListado[]): Array<{ titulo: string; filas: FilaListado[] }> {
+export function gruposVehiculos(filas: FilaListado[]): Array<{ titulo: string; filas: FilaListado[] }> {
   const grupos = new Map<string, FilaListado[]>();
   for (const f of filas) {
     const t = (f.tipoVehiculo ?? "Camion").trim() || "Camion";
@@ -70,7 +70,7 @@ function gruposVehiculos(filas: FilaListado[]): Array<{ titulo: string; filas: F
   return [...grupos.entries()].map(([titulo, filas]) => ({ titulo, filas }));
 }
 
-const plural = (titulo: string, n: number) => (n === 1 ? titulo : titulo.endsWith("n") ? `${titulo.replace(/ón$/, "on")}es` : `${titulo}s`);
+export const plural = (titulo: string, n: number) => (n === 1 ? titulo : titulo.endsWith("n") ? `${titulo.replace(/ón$/, "on")}es` : `${titulo}s`);
 
 /** Resumen para el epígrafe del PDF (WhatsApp). */
 export function resumenListado(d: Omit<DatosListado, "generado" | "bot">): string {
@@ -86,8 +86,8 @@ export function resumenListado(d: Omit<DatosListado, "generado" | "bot">): strin
   return lineas.join("\n");
 }
 
-/** Nombre del archivo: "Choferes_CAGSA_S_A_2026-10-22.pdf". */
-export function nombreArchivoListado(tipo: TipoRegistro, cliente: string, hoy: CalendarDate): string {
+/** Nombre del archivo: "Choferes_CAGSA_S_A_2026-10-22.xlsx" (o .pdf). */
+export function nombreArchivoListado(tipo: TipoRegistro, cliente: string, hoy: CalendarDate, extension: "pdf" | "xlsx" = "pdf"): string {
   const limpio = cliente
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -95,7 +95,7 @@ export function nombreArchivoListado(tipo: TipoRegistro, cliente: string, hoy: C
     .replace(/^_|_$/g, "")
     .slice(0, 40);
   const f = `${hoy.year}-${String(hoy.month).padStart(2, "0")}-${String(hoy.day).padStart(2, "0")}`;
-  return `${tipo === "chofer" ? "Choferes" : "Dominios"}_${limpio}_${f}.pdf`;
+  return `${tipo === "chofer" ? "Choferes" : "Dominios"}_${limpio}_${f}.${extension}`;
 }
 
 interface Columna {

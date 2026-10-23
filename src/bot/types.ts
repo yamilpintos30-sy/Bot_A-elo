@@ -44,7 +44,8 @@ export type Outbound =
    * desordena; el canal espera la confirmación de entrega antes de seguir.
    */
   | { kind: "buttons"; text: string; buttons: ButtonSpec[]; esperarEntrega?: boolean }
-  | { kind: "file"; filename: string; data: Buffer; caption?: string }
+  /** `mime`: tipo del archivo (por defecto PDF; los listados de logística van en Excel). */
+  | { kind: "file"; filename: string; data: Buffer; caption?: string; mime?: string }
   /** Imagen de bienvenida (avatar del bot) con epígrafe. Sin imagen configurada, sale como texto. */
   | { kind: "image"; caption: string };
 
@@ -98,7 +99,7 @@ export interface ConsultaState {
    * Rama elegida en el menú principal:
    *   habilitacion -> por DNI / dominio (logística: también por nombre) -> clientes -> elegir uno
    *   vehiculo     -> VTV o seguro por patente (sólo choferes)
-   *   grupal       -> listado en PDF de choferes o dominios de un cliente (sólo logística)
+   *   grupal       -> listado en Excel de choferes o dominios de un cliente (sólo logística)
    */
   rama?: "habilitacion" | "vehiculo" | "grupal";
   /**

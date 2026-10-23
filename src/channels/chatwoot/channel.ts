@@ -39,7 +39,7 @@ export class ChatwootChannel implements Channel {
         // Igual que con la imagen del saludo: WhatsApp procesa el PDF más lento
         // que un texto, y el "¿Necesitás algo más?" llegaba ANTES que el carnet.
         // Se espera la confirmación de entrega antes de seguir.
-        const id = await this.client.sendFile(conversationId, out.filename, out.data, out.caption);
+        const id = await this.client.sendFile(conversationId, out.filename, out.data, out.caption, out.mime);
         await this.esperarEntrega(conversationId, id);
         return;
       }

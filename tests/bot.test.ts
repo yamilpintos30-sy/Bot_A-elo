@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import pino from "pino";
 import { PDFDocument } from "pdf-lib";
+import ExcelJS from "exceljs";
 import { resolver, sugerir } from "../src/bot/catalogo.js";
 import { LotesPendientes, type BotDeps, type SeaWhiteService } from "../src/bot/deps.js";
 import { BotEngine } from "../src/bot/engine.js";
@@ -1146,7 +1147,7 @@ describe("logística", () => {
     let outs = await L(say, "hola");
     expect(outs).toHaveLength(1);
     expect(outs[0]!.kind).toBe("buttons");
-    expect(texts(outs)).toMatch(/^¡Hola! 👋\n¿Qué tipo de consulta querés hacer\?\n🔎 \*Individual\*: un chofer o un vehículo, por DNI, nombre o dominio[\s\S]*Grupal\*: el listado en PDF/);
+    expect(texts(outs)).toMatch(/^¡Hola! 👋\n¿Qué tipo de consulta querés hacer\?\n🔎 \*Individual\*: un chofer o un vehículo, por DNI, nombre o dominio[\s\S]*Grupal\*: el listado en Excel/);
     expect(buttons(outs)).toEqual(MENU_LOG);
     outs = await L(say, "vtv");
     expect(buttons(outs)).toEqual(MENU_LOG); // VTV y seguro no es de logística
@@ -1235,11 +1236,18 @@ describe("logística", () => {
     expect(buttons(outs)).toEqual(["Planta 1", "Eso es todo, gracias"]);
     outs = await L(say, "Planta 1");
     const file = outs.find((o) => o.kind === "file") as Extract<Outbound, { kind: "file" }>;
-    expect(file.filename).toBe("Choferes_TOTAL_AUSTRAL_2026-10-15.pdf");
-    expect(file.data.subarray(0, 5).toString()).toBe("%PDF-");
+    // Va en Excel: mismo contenido que el PDF, con el resumen como epígrafe.
+    expect(file.filename).toBe("Choferes_TOTAL_AUSTRAL_2026-10-15.xlsx");
+    expect(file.mime).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     expect(file.caption).toBe("📋 *Choferes habilitados*\n*TOTAL AUSTRAL – Planta 1*\n👤 2 choferes\n⚠️ 1 vence en los próximos 7 días");
-    const pdf = await PDFDocument.load(file.data);
-    expect(pdf.getPageCount()).toBe(1);
+    const libro = new ExcelJS.Workbook();
+    await libro.xlsx.load(file.data as unknown as ArrayBuffer);
+    const hoja = libro.worksheets[0]!;
+    expect(hoja.name).toBe("Choferes");
+    const filas: unknown[][] = [];
+    hoja.eachRow((f) => filas.push((f.values as unknown[]).slice(1)));
+    expect(filas).toContainEqual(["N°", "DNI", "Apellido y nombre", "Vence", "Estado"]);
+    expect(filas).toContainEqual([1, "33615617", "OJEDA BORIS DANIEL", new Date(Date.UTC(2026, 9, 18)), "vence en 3 días"]);
     expect(buttons(outs)).toEqual(FIN_LISTADO);
 
     outs = await L(say, "📋 Otro listado");
