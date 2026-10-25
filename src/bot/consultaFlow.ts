@@ -5,11 +5,11 @@
  *
  *   🪪 Habilitación -> [Por DNI] [Por dominio] [Menú]
  *        -> DNI o patente
- *        -> clientes donde está habilitado (API 1 / 7 de SEA WHITE) -> elige uno
- *        -> su operadora (API 2 / 8), del menú aunque haya una sola
+ *        -> operadoras donde está habilitado (API 1 / 7 de SEA WHITE) -> elige una
+ *        -> su pozo (API 2 / 8), del menú aunque haya uno solo
  *        -> habilitación y vencimiento -> ¿carnet? -> PDF
  *        al terminar: [🏠 Menú principal] vuelve al inicio, [🔎 Otra habilitación] otro DNI o dominio,
- *        [Eso es todo]. Con varios clientes, también [🏢 Otro cliente].
+ *        [Eso es todo]. Con varias operadoras, también [🏢 Otra operadora].
  *
  *   📄 VTV y seguro -> [VTV] [Seguro] [Menú] -> patente -> PDF -> ¿el otro también?
  *
@@ -18,11 +18,14 @@
  *   🔎 Individual -> [Por DNI] [Por nombre] [Por dominio]
  *        por nombre: al menos 3 letras -> choferes que coinciden (API 6, con el
  *        DNI debajo para distinguir a los homónimos) -> elige -> sigue como por DNI
- *   📋 Grupal -> [Choferes] [Dominios] -> cliente (API 3 / 9) -> operadora (4 / 10)
+ *   📋 Grupal -> [Choferes] [Dominios] -> operadora (API 3 / 9) -> pozo (4 / 10)
  *        -> Excel con todos los vigentes (5 / 11) y el resumen como epígrafe
  *
- * Los clientes salen de SEA WHITE, no de la tabla del bot: sólo aparecen
- * aquellos donde ese DNI o esa patente tienen habilitación vigente.
+ * Las operadoras salen de SEA WHITE, no de la tabla del bot: sólo aparecen
+ * aquellas donde ese DNI o esa patente tienen habilitación vigente.
+ *
+ * NOMBRES (25-oct-2026): lo que la API de SEA WHITE y el código llaman CLIENTE,
+ * en los mensajes es la OPERADORA; lo que llaman SUBCLIENTE es el POZO.
  */
 import { findDniInText, findPatenteInText, normalizeDni, normalizePatente } from "../domain/validators.js";
 import type { CodigoNombre, Documentacion, TipoRegistro } from "../integrations/seawhite/types.js";
@@ -51,7 +54,7 @@ const MENU_PRINCIPAL: ButtonSpec[] = [
 const MENU_HABILITACION: ButtonSpec[] = [{ title: "🪪 Por DNI", payload: "m:chofer" }, { title: "🚛 Por dominio", payload: "m:dominio" }, BOTON_MENU];
 const MENU_VEHICULO: ButtonSpec[] = [{ title: "📄 VTV", payload: "m:vtv" }, { title: "🛡️ Seguro", payload: "m:seguro" }, BOTON_MENU];
 const BOTON_CONSULTA: ButtonSpec = { title: "🔎 Otra habilitación", payload: "consulta" };
-const BOTON_OTRO_CLIENTE: ButtonSpec = { title: "🏢 Otro cliente", payload: "otrocli" };
+const BOTON_OTRO_CLIENTE: ButtonSpec = { title: "🏢 Otra operadora", payload: "otrocli" };
 /** Cierre de una consulta de habilitación: inicio, otro DNI/dominio, o terminar. */
 const FIN_CONSULTA: ButtonSpec[] = [BOTON_MENU, BOTON_CONSULTA, BOTON_FIN];
 
@@ -385,7 +388,7 @@ export class ConsultaFlow {
     st.plantaNombre = undefined;
     const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `hc:${clientes[i]!.codigo}` }));
     const encabezado = CONSULTA.elegirClienteHabilitado(tipo, st.identificador, clientes.length);
-    return this.menu(emit, opciones, encabezado, "clientes");
+    return this.menu(emit, opciones, encabezado, "operadoras");
   }
 
   /** Eligió el cliente -> sus operadoras (API 2 / 8), para elegir del menú. */
@@ -415,7 +418,7 @@ export class ConsultaFlow {
     const subs = st.subclientes ?? [];
     const opciones = titulos(subs, (s) => s.nombre).map((b, i) => ({ ...b, payload: `hs:${subs[i]!.codigo}` }));
     const encabezado = CONSULTA.elegirOperadoraHabilitada(st.clienteNombre ?? "");
-    return this.menu(emit, opciones, encabezado, "operadoras");
+    return this.menu(emit, opciones, encabezado, "pozos");
   }
 
   private elegirOperadora(st: ConsultaState, codigo: string, emit: Emit, lista = st.subclientes): Promise<void> {
@@ -548,7 +551,7 @@ export class ConsultaFlow {
     const clientes = st.listado?.clientes ?? [];
     const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `gc:${clientes[i]!.codigo}` }));
     const encabezado = CONSULTA.listadoElegirCliente(this.tipoListado(st));
-    return this.menu(emit, opciones, encabezado, "clientes");
+    return this.menu(emit, opciones, encabezado, "operadoras");
   }
 
   /** Eligió el cliente -> operadoras con vigentes (API 4 / 10). Siempre se elige del menú. */
@@ -573,7 +576,7 @@ export class ConsultaFlow {
     const subs = st.listado?.subclientes ?? [];
     const opciones = titulos(subs, (s) => s.nombre).map((b, i) => ({ ...b, payload: `gs:${subs[i]!.codigo}` }));
     const encabezado = CONSULTA.elegirOperadoraHabilitada(st.listado?.cliente?.nombre ?? "");
-    return this.menu(emit, opciones, encabezado, "operadoras");
+    return this.menu(emit, opciones, encabezado, "pozos");
   }
 
   private elegirSubclienteListado(st: ConsultaState, codigo: string, emit: Emit): Promise<void> {

@@ -230,7 +230,7 @@ export function resolver(texto: string, clientes: Cliente[]): Resolucion {
 
 /** "TOTAL AUSTRAL – Planta 1" */
 export function etiqueta(cliente: Cliente | undefined, planta: Planta | undefined, clienteCodigo?: string, plantaCodigo?: string): string {
-  const c = cliente?.nombre ?? `Cliente ${clienteCodigo ?? "?"}`;
+  const c = cliente?.nombre ?? `Operadora ${clienteCodigo ?? "?"}`;
   const p = planta?.nombre ?? `Planta ${plantaCodigo ?? "?"}`;
   return `${c} – ${p}`;
 }

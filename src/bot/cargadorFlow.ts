@@ -1,15 +1,18 @@
 /**
  * Flujo de CARGA (números de la lista de cargadores).
  *
- *   ¿Qué cliente?      -> menú con los clientes de la tabla (varias listas si son más de 10)
- *   ¿Qué operadora?    -> menú con los subclientes de ese cliente
+ *   ¿Qué operadora?    -> menú con las operadoras de la tabla (varias listas si son más de 10)
+ *   ¿Qué pozo?         -> menú con los pozos (subclientes) de esa operadora
  *   ¿Qué documentación? -> [Choferes] [Dominios]
  *   -> mandar el PDF -> procesar, avisando el progreso (separar carnets, verificar)
  *   -> FILTRO DE TIPO: si eligió choferes y el PDF trae vehículos (o al revés), avisa
  *   -> resumen + [Confirmar carga] [Cancelar]
- *   -> guardar en SEA WHITE -> resultado -> otra carga (mismo cliente u otro)
+ *   -> guardar en SEA WHITE -> resultado -> otra carga (misma operadora u otra)
  *
- * Nada se escribe: cliente y operadora se eligen de menús.
+ * Nada se escribe: operadora y pozo se eligen de menús.
+ *
+ * NOMBRES (25-oct-2026): lo que la API de SEA WHITE y el código llaman CLIENTE,
+ * en los mensajes es la OPERADORA; lo que llaman SUBCLIENTE es el POZO.
  */
 import { nombreYApellido } from "../domain/validators.js";
 import { FormatoNoSoportadoError, unirEnPdf } from "../extraction/aPdf.js";
@@ -26,7 +29,7 @@ import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaC
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
 const MENU_TIPO: ButtonSpec[] = [{ title: "👤 Choferes", payload: "tipo:chofer" }, { title: "🚛 Dominios", payload: "tipo:dominio" }, BOTON_FIN];
-const CAMBIAR_CLIENTE: ButtonSpec = { title: "🔄 Cambiar cliente", payload: "otrocliente" };
+const CAMBIAR_CLIENTE: ButtonSpec = { title: "🔄 Cambiar operadora", payload: "otrocliente" };
 /** "Elegiste X. ¿Es correcto?" después de elegir el cliente. */
 const CLIENTE_SI: ButtonSpec = { title: "✅ Sí", payload: "clisi" };
 const CLIENTE_NO: ButtonSpec = { title: "✏️ No", payload: "clino" };
@@ -148,14 +151,14 @@ export class CargadorFlow {
   /** Menú de clientes (por orden alfabético): botones, una lista o varias (menuListas.ts). */
   private async menuClientes(clientes: Cliente[], emit: Emit, hola: boolean): Promise<void> {
     const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
-    if (!opciones.length) return emit({ kind: "text", text: "No hay clientes cargados. Cargalos desde el panel (Clientes y subclientes)." });
-    return emitirMenu(emit, opciones, { una: (lista) => CARGA.elegirCliente(hola, lista), varias: (listas) => CARGA.elegirClienteVarias(hola, listas), deQue: "clientes" });
+    if (!opciones.length) return emit({ kind: "text", text: "No hay operadoras cargadas. Cargalas desde el panel (Operadoras y pozos)." });
+    return emitirMenu(emit, opciones, { una: (lista) => CARGA.elegirCliente(hola, lista), varias: (listas) => CARGA.elegirClienteVarias(hola, listas), deQue: "operadoras" });
   }
 
   /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
   private menuOperadoras(cliente: Cliente, emit: Emit): Promise<void> {
     const plantas = cliente.plantas.slice(0, MAX_OPCIONES - 1);
-    if (!plantas.length) return emit({ kind: "buttons", text: `*${cliente.nombre}* no tiene operadoras cargadas.`, buttons: [BOTON_MENU, BOTON_FIN] });
+    if (!plantas.length) return emit({ kind: "buttons", text: `*${cliente.nombre}* no tiene pozos cargados.`, buttons: [BOTON_MENU, BOTON_FIN] });
     const botones = titulos(plantas, (p) => p.nombre).map((b, i) => ({ ...b, payload: `pla:${plantas[i]!.codigo}` }));
     return emit({ kind: "buttons", text: CARGA.elegirOperadora(cliente.nombre), buttons: botones });
   }

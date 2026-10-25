@@ -3,6 +3,9 @@
  *
  *   - Cargadores: sólo datos, sin saludos ni cordialidades (pedido del equipo).
  *   - Choferes: trato de atención al público de una empresa, como Enri.
+ *
+ * NOMBRES (25-oct-2026): lo que la API de SEA WHITE y el código llaman CLIENTE,
+ * en los mensajes es la OPERADORA; lo que llaman SUBCLIENTE es el POZO.
  */
 import type { CarnetListo, CarnetRechazado } from "../extraction/review.js";
 import type { ResumenCarga } from "../integrations/seawhite/types.js";
@@ -61,7 +64,7 @@ export const DESPEDIDA = {
   consulta: "¡Gracias por comunicarte con PUERTO WHITE! Cuando necesites consultar un vencimiento, escribime. Saludos.",
   cargador: "Listo. Cuando tengas otra carga, escribime.",
   cargaCancelada: "Listo. La carga pendiente se canceló: no se cargó nada. Cuando tengas otra carga, escribime.",
-  /** Cargador: 1 hora sin actividad, la sesión se cierra sola (el cliente queda libre). */
+  /** Cargador: 1 hora sin actividad, la sesión se cierra sola (la operadora queda libre). */
   inactividad: "⏱️ Pasó 1 hora sin actividad, así que cerré la sesión. Cuando tengas otra carga, escribime y arrancamos de nuevo. ¡Saludos! 👋",
   inactividadConCarga: "⏱️ Pasó 1 hora sin actividad, así que cerré la sesión. La carga pendiente se canceló: no se cargó nada. Cuando tengas otra carga, escribime y arrancamos de nuevo. ¡Saludos! 👋",
 };
@@ -79,26 +82,26 @@ const deTipo = (tipo: "chofer" | "dominio", listado: boolean) => (listado ? TIPO
 const unidad = (n: number, listado: boolean) => `${listado ? "registro" : "carnet"}${n === 1 ? "" : "s"}`;
 
 export const CARGA = {
-  /** Paso 1: cliente (menú, de la tabla de clientes). */
+  /** Paso 1: operadora (menú, de la tabla de operadoras). */
   /**
    * `lista`: con más de 3 opciones WhatsApp muestra un botón "Choose an item" (texto
    * fijo de Chatwoot, no se puede cambiar): se aclara que hay que tocarlo.
    */
-  elegirCliente: (hola: boolean, lista = false) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?${lista ? `\n${aclaracionLista}` : ""}`,
-  /** Muchos clientes: van en varias listas seguidas, por orden alfabético. */
-  elegirClienteVarias: (hola: boolean, listas: number) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *cliente* vas a cargar?\n${variasListas(listas)}`,
-  /** Paso 2: operadora (subcliente) del cliente elegido. */
-  elegirOperadora: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
-  /** Después de elegir el cliente: se confirma antes de pasar a la operadora. */
+  elegirCliente: (hola: boolean, lista = false) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *operadora* vas a cargar?${lista ? `\n${aclaracionLista}` : ""}`,
+  /** Muchas operadoras: van en varias listas seguidas, por orden alfabético. */
+  elegirClienteVarias: (hola: boolean, listas: number) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *operadora* vas a cargar?\n${variasListas(listas)}`,
+  /** Paso 2: pozo (subcliente) de la operadora elegida. */
+  elegirOperadora: (operadora: string) => `*${operadora}*\n¿Qué *pozo*?`,
+  /** Después de elegir la operadora: se confirma antes de pasar al pozo. */
   confirmarCliente: (cliente: string) => `Elegiste *${cliente}*. ¿Es correcto?`,
   /** Paso 3: tipo de documentación. */
   elegirTipo: (destino: string) => `*${destino}*\n¿Qué documentación vas a cargar?`,
   menu: "¿Qué documentación vas a cargar?",
-  otraCarga: (cliente?: string) => `¿Querés cargar más documentación de ${cliente ? `*${cliente}*` : "este cliente"}, o cambiar de cliente?`,
+  otraCarga: (operadora?: string) => `¿Querés cargar más documentación de ${operadora ? `*${operadora}*` : "esta operadora"}, o cambiar de operadora?`,
   /** Mensaje aparte, debajo del menú de después de una carga (los botones de arriba siguen valiendo). */
   oCerrar: "O si no, podés cerrar la sesión.",
   /** Mandó el archivo antes de terminar de elegir: se guarda y se sigue con lo que falta. */
-  archivoEnEspera: "📎 Guardé el archivo. Primero elegí cliente, operadora y qué documentación es.",
+  archivoEnEspera: "📎 Guardé el archivo. Primero elegí operadora, pozo y qué documentación es.",
   encontrado: (destino: string, tipo: "chofer" | "dominio") => `${TIPO[tipo].emoji} *${destino}* – ${TIPO[tipo].plural}\n📄 Mandá el PDF (o las fotos) con los ${TIPO[tipo].carnets}.`,
   soloPdf: "Solo se aceptan archivos PDF o fotos (JPG o PNG) de los carnets.",
   /** Todavía no se sabe si son carnets o un listado: texto neutro. */
@@ -207,7 +210,7 @@ export const CONSULTA = {
   /** Menú principal: dos ramas. */
   menuPrincipal: [
     "¿Qué querés consultar?",
-    "🪪 *Habilitación*: en qué clientes podés entrar y hasta cuándo, por DNI o por dominio.",
+    "🪪 *Habilitación*: en qué operadoras podés entrar y hasta cuándo, por DNI o por dominio.",
     "📄 *VTV y seguro*: te mando el comprobante del vehículo.",
   ].join("\n"),
   /** Rama habilitación. */
@@ -217,14 +220,14 @@ export const CONSULTA = {
   pedirDni: "👤 Pasame el *DNI* del chofer (solo números, sin puntos).",
   pedirPatente: "🚛 Pasame la *patente* (dominio) del vehículo. Ejemplo: AA123BB",
   buscandoHabilitaciones: (tipo: "chofer" | "dominio", id: string) => `🔎 Buscando dónde está habilitado ${tipo === "chofer" ? "el DNI" : "el dominio"} *${id}*…`,
-  /** La API 1 / 7 no devolvió ningún cliente (sólo informa habilitaciones VIGENTES). */
+  /** La API 1 / 7 no devolvió ninguna operadora (sólo informa habilitaciones VIGENTES). */
   sinHabilitaciones: (tipo: "chofer" | "dominio", id: string) =>
     `❌ No encontré habilitaciones vigentes para ${tipo === "chofer" ? "el DNI" : "el dominio"} *${id}*.\nRevisá ${tipo === "chofer" ? "el número" : "la patente"} y escribil${tipo === "chofer" ? "o" : "a"} de nuevo.`,
-  /** Clientes donde está habilitado: se elige uno (botones, lista o varias listas). */
+  /** Operadoras donde está habilitado: se elige una (botones, lista o varias listas). */
   elegirClienteHabilitado: (tipo: "chofer" | "dominio", id: string, cantidad: number) =>
-    `${tipo === "chofer" ? "👤 DNI" : "🚛 Dominio"} *${id}*: habilitado en *${cantidad}* cliente${cantidad === 1 ? "" : "s"}.\n` +
-    `ℹ️ Si no ves el cliente, es porque *NO estás habilitado*.\n¿Cuál querés ver?`,
-  elegirOperadoraHabilitada: (cliente: string) => `*${cliente}*\n¿Qué *operadora*?`,
+    `${tipo === "chofer" ? "👤 DNI" : "🚛 Dominio"} *${id}*: habilitado en *${cantidad}* operadora${cantidad === 1 ? "" : "s"}.\n` +
+    `ℹ️ Si no ves la operadora, es porque *NO estás habilitado*.\n¿Cuál querés ver?`,
+  elegirOperadoraHabilitada: (operadora: string) => `*${operadora}*\n¿Qué *pozo*?`,
   consultaNoDisponible: "No pude consultar las habilitaciones en este momento. Probá de nuevo en unos minutos.",
   pedirPatenteDoc: (doc: "vtv" | "seguro") => `🚛 Pasame la *patente* (dominio) del vehículo y te mando ${doc === "vtv" ? "la *VTV*" : "el *seguro*"}. Ejemplo: AA123BB`,
   docCaption: (doc: "vtv" | "seguro", dominio: string) => `${doc === "vtv" ? "📄 VTV" : "🛡️ Seguro"} – ${dominio}`,
@@ -250,10 +253,10 @@ export const CONSULTA = {
   menuLogistica: [
     "¿Qué tipo de consulta querés hacer?",
     "🔎 *Individual*: un chofer o un vehículo, por DNI, nombre o dominio.",
-    "📋 *Grupal*: el listado en Excel de los choferes o dominios habilitados de un cliente.",
+    "📋 *Grupal*: el listado en Excel de los choferes o dominios habilitados de una operadora.",
   ].join("\n"),
   menuIndividual: "¿Cómo querés buscar?",
-  /** Debajo de una lista de clientes u operadoras (no entra el botón en el mismo mensaje). */
+  /** Debajo de una lista de operadoras o pozos (no entra el botón en el mismo mensaje). */
   oTerminar: "O si no, podés terminar la consulta.",
   algoMasLogistica: "¿Necesitás algo más?\n🔎 *Otra habilitación*: otro DNI, nombre o dominio.\n🏠 *Menú principal*: consultas individuales o grupales.",
   pedirNombre: "👤 Escribí el *apellido* del chofer (o apellido y nombre). Al menos 3 letras.",
@@ -263,11 +266,11 @@ export const CONSULTA = {
   demasiadosNombres: (n: number, t: string) => `Encontré *${n}* choferes con "*${t}*": son demasiados para mostrarlos. Escribí algo más preciso (apellido y nombre).`,
   elegirEncontrado: (n: number, t?: string) => `👤 Encontré *${n}* chofer${n === 1 ? "" : "es"}${t ? ` con "*${t}*"` : ""}.\n¿Cuál es?`,
   menuGrupal: "¿Qué listado necesitás?",
-  listadoElegirCliente: (tipo: "chofer" | "dominio") => `📋 Listado de *${tipo === "chofer" ? "choferes" : "dominios"}* habilitados.\n¿De qué cliente?`,
-  listadoSinClientes: (tipo: "chofer" | "dominio") => `No hay clientes con ${tipo === "chofer" ? "choferes" : "dominios"} habilitados en este momento.`,
+  listadoElegirCliente: (tipo: "chofer" | "dominio") => `📋 Listado de *${tipo === "chofer" ? "choferes" : "dominios"}* habilitados.\n¿De qué operadora?`,
+  listadoSinClientes: (tipo: "chofer" | "dominio") => `No hay operadoras con ${tipo === "chofer" ? "choferes" : "dominios"} habilitados en este momento.`,
   armandoListado: "⏳ Armando el listado en Excel…",
-  listadoVacio: "No hay registros vigentes para ese cliente y operadora.",
-  algoMasListado: "¿Necesitás algo más?\n📋 *Otro listado*: de otro cliente, o el de choferes o dominios.\n🏠 *Menú principal*: consultas individuales o grupales.",
+  listadoVacio: "No hay registros vigentes para esa operadora y pozo.",
+  algoMasListado: "¿Necesitás algo más?\n📋 *Otro listado*: de otra operadora, o el de choferes o dominios.\n🏠 *Menú principal*: consultas individuales o grupales.",
 };
 
 export interface LineaPlanta {
@@ -284,7 +287,7 @@ export function respuestaConsulta(opts: {
   identificador: string;
   nombre: string | null;
   plantas: LineaPlanta[];
-  /** Cliente y subcliente por el que preguntó y donde NO tiene credencial. */
+  /** Operadora y pozo por el que preguntó y donde NO tiene credencial. */
   sinCredencialEn?: string;
   hoy: CalendarDate;
 }): string {

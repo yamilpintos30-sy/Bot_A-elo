@@ -21,7 +21,7 @@ export interface TextosMenu {
   una: (lista: boolean) => string;
   /** Van en varias listas: encabezado del primer mensaje. */
   varias: (listas: number) => string;
-  /** Qué hay en las listas, en plural: "📋 Lista 1 de 3 de *clientes*". */
+  /** Qué hay en las listas, en plural: "📋 Lista 1 de 3 de *operadoras*". */
   deQue: string;
   /**
    * Botón para irse ([Eso es todo, gracias]): con 1 o 2 opciones va en el mismo
