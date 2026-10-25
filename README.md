@@ -45,7 +45,7 @@ No toca SEA WHITE ni Chatwoot.
 ```bash
 cp .env.example .env        # completar ANTHROPIC_API_KEY
 npm install
-npm run extraer -- "../Documentos bot 2/ejemplos documentacion/Total - Unidades PW.pdf"
+npm run extraer -- "../03 - Bot Puerto White (Añelo)/Presentación/Archivos de prueba/2 - Total - Unidades PW.pdf"
 ```
 
 La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos personales).
