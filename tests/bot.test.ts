@@ -456,7 +456,7 @@ describe("cargador", () => {
     expect(buttons(outs)).toEqual(["Confirmar carga", "Cancelar"]);
   });
 
-  it("más de 10 clientes: varias listas seguidas de hasta 10, todas válidas a la vez", async () => {
+  it("más de 10 clientes: varias listas parejas de hasta 10, todas válidas a la vez", async () => {
     const { say, deps } = setup();
     const nombre = (n: number) => `Cliente ${String(n).padStart(2, "0")}`;
     const muchos = Array.from({ length: 25 }, (_, i) => ({
@@ -468,9 +468,9 @@ describe("cargador", () => {
     deps.catalogo = new MemoryCatalogo(muchos);
     let outs = await say(CARGADOR, "hola");
     expect(outs.map((o) => (o.kind === "buttons" ? o.buttons.map((b) => b.title) : []))).toEqual([
-      Array.from({ length: 10 }, (_, i) => nombre(i + 1)),
-      Array.from({ length: 10 }, (_, i) => nombre(i + 11)),
-      Array.from({ length: 5 }, (_, i) => nombre(i + 21)),
+      Array.from({ length: 9 }, (_, i) => nombre(i + 1)),
+      Array.from({ length: 9 }, (_, i) => nombre(i + 10)),
+      Array.from({ length: 7 }, (_, i) => nombre(i + 19)),
     ]);
     expect(texts(outs)).toBe(
       "¡Hola! 👋\n¿Qué *operadora* vas a cargar?\n👇 Están en 3 listas por orden alfabético: tocá el botón de la que corresponda.\n\n📋 Lista 1 de 3 de operadoras" +
@@ -1007,13 +1007,13 @@ describe("chofer", () => {
     expect(texts(outs)).not.toMatch(/33615617/);
   });
 
-  it("muchos clientes: van en varias listas de hasta 10", async () => {
+  it("muchos clientes: van en varias listas parejas (12 = 2 de 6)", async () => {
     const { say, seawhite } = setup();
     seawhite.clientesHabilitados = async () => Array.from({ length: 12 }, (_, i) => ({ codigo: String(i + 1).padStart(4, "0"), nombre: `CLIENTE ${String(i + 1).padStart(2, "0")}` }));
     await enHabilitacion(say, "🪪 Por DNI");
     const outs = await say(CHOFER, "33615617");
     const listas = outs.filter((o) => o.kind === "buttons") as Array<Extract<Outbound, { kind: "buttons" }>>;
-    expect(listas.map((l) => l.buttons.length)).toEqual([10, 2, 1]);
+    expect(listas.map((l) => l.buttons.length)).toEqual([6, 6, 1]);
     expect(listas[0]!.text).toMatch(/habilitado en \*12\* operadoras\.\nℹ️ .*NO estás habilitado.*\n¿Cuál querés ver\?\n👇 Están en 2 listas/);
     expect(listas[1]!.text).toBe("📋 Lista 2 de 2 de operadoras");
     // Y aparte, para irse (no entra en las listas): después de que se entreguen.
@@ -1277,6 +1277,29 @@ describe("logística", () => {
     await say(CHOFER, "🪪 Habilitación");
     outs = await say(CHOFER, "por nombre");
     expect(buttons(outs)).toEqual(["🪪 Por DNI", "🚛 Por dominio", "🏠 Menú principal"]);
+  });
+
+  it("cargador: 'hola logística' (con o sin acento) abre logística hasta 'Eso es todo, gracias'", async () => {
+    const { say } = setup();
+    let outs = await say(CARGADOR, "HOLA LOGÍSTICA");
+    expect(texts(outs)).toMatch(/^¡Hola! 👋\n¿Qué tipo de consulta querés hacer\?/);
+    expect(buttons(outs)).toEqual(MENU_LOG);
+    outs = await say(CARGADOR, "📋 Grupal");
+    expect(buttons(outs)).toEqual(MENU_GRU);
+    await say(CARGADOR, "Eso es todo, gracias");
+    // Después del cierre vuelve a ser cargador.
+    outs = await say(CARGADOR, "hola");
+    expect(texts(outs)).toMatch(/¿Qué \*operadora\* vas a cargar\?/);
+  });
+
+  it("cargador con la carga abierta: 'hola logistica' le pide cerrar primero", async () => {
+    const { say } = setup();
+    await say(CARGADOR, "hola");
+    let outs = await say(CARGADOR, "hola logistica");
+    expect(texts(outs)).toMatch(/primero cerrá la carga: tocá \*Eso es todo, gracias\*/);
+    await say(CARGADOR, "Eso es todo, gracias");
+    outs = await say(CARGADOR, "Hola Logistica");
+    expect(buttons(outs)).toEqual(MENU_LOG);
   });
 
   it("si un número está en logística y en choferes, ve el menú de logística", async () => {

@@ -13,10 +13,10 @@
  */
 import { normalizeText } from "../utils/text.js";
 import { CargadorFlow } from "./cargadorFlow.js";
-import { detectarComando, esSoloCortesia, PIE } from "./comandos.js";
+import { detectarComando, esHolaLogistica, esSoloCortesia, PIE } from "./comandos.js";
 import { ConsultaFlow } from "./consultaFlow.js";
 import type { BotDeps } from "./deps.js";
-import { DESPEDIDA, NO_HABILITADO } from "./texts.js";
+import { DESPEDIDA, NO_HABILITADO, PASAR_A_LOGISTICA } from "./texts.js";
 import type { IncomingMessage, Outbound, Perfil, Session } from "./types.js";
 
 /** Canal de salida (Chatwoot en producción; un array en los tests). */
@@ -106,8 +106,29 @@ export class BotEngine {
       }
     }
     session.avisoNoHabilitado = undefined;
-    session.rol = esCargador ? "cargador" : "consulta";
-    session.perfil = esCargador ? undefined : perfil;
+
+    // Cargador que escribe "hola logística": entra al menú de logística y sigue ahí
+    // hasta "Eso es todo, gracias". Con una carga abierta, primero tiene que cerrarla.
+    let forzarMenu = false;
+    if (!esCargador) session.modoLogistica = undefined;
+    else if (!session.modoLogistica && msg.attachments.length === 0 && esHolaLogistica(msg.text)) {
+      if (session.cargador) {
+        const salida = this.salida(msg.conversationId, session);
+        session.botones = [];
+        await salida.emit({ kind: "text", text: PASAR_A_LOGISTICA });
+        await salida.terminar();
+        session.updatedAt = deps.now().toISOString();
+        await deps.sessions.save(session).catch((err) => deps.logger.error({ err }, "No se pudo guardar la sesión"));
+        return;
+      }
+      session.modoLogistica = true;
+      session.consulta = undefined;
+      forzarMenu = true;
+    }
+    const comoCargador = esCargador && !session.modoLogistica;
+    if (esCargador && session.modoLogistica) perfil = "logistica";
+    session.rol = comoCargador ? "cargador" : "consulta";
+    session.perfil = comoCargador ? undefined : perfil;
 
     // Varios toques que llegaron juntos (WhatsApp/Chatwoot los demoró y el buffer los
     // unió en un texto de varios renglones): vale el ÚLTIMO, como si se hubiera tocado solo.
@@ -115,7 +136,7 @@ export class BotEngine {
       const ultimo = this.ultimoToque(session, msg.text);
       if (ultimo !== undefined) msg = { ...msg, text: ultimo };
     }
-    const payload = this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined);
+    const payload = forzarMenu ? "menu" : (this.payloadDeBoton(session, msg.text) ?? (msg.attachments.length === 0 ? detectarComando(msg.text) : undefined));
     session.botones = [];
     void deps.log.log({ conversationId: msg.conversationId, phone: session.phone, direction: "in", rol: session.rol, content: msg.text, meta: { attachments: msg.attachments.length, payload } });
 

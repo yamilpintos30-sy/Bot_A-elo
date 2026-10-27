@@ -71,6 +71,10 @@ export const DESPEDIDA = {
 
 // --- Cargadores ------------------------------------------------------------------
 
+/** Cargador que pide logística con una carga abierta: primero tiene que cerrarla. */
+export const PASAR_A_LOGISTICA =
+  "Para pasar a las consultas de logística, primero cerrá la carga: tocá *Eso es todo, gracias* y después escribí *hola logística*.";
+
 /** "choferes" / "dominios" y su emoji, para los textos del cargador. */
 export const TIPO = {
   chofer: { plural: "choferes", emoji: "👤", carnets: "carnets de personas", registros: "registros de personas" },

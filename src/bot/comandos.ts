@@ -38,3 +38,8 @@ export function esSoloCortesia(texto: string): boolean {
     .filter(Boolean)
     .every((w) => CORTESIA.has(w));
 }
+
+/** "hola logística" (con o sin acento, mayúsculas o minúsculas): un cargador entra al menú de logística. */
+export function esHolaLogistica(texto: string): boolean {
+  return normalizeText(texto) === "hola logistica";
+}

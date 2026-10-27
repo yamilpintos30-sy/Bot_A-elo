@@ -144,6 +144,11 @@ export interface Session {
   botones: ButtonSpec[];
   /** Si es futuro, una persona tomó la conversación y el bot no responde. */
   handedOffUntil: string | null;
+  /**
+   * Cargador que escribió "hola logística": hasta que cierre con "Eso es todo,
+   * gracias" usa el menú de logística en vez del de carga.
+   */
+  modoLogistica?: boolean;
   /** Número no habilitado al que ya se le mandó el aviso: no se le responde más. */
   avisoNoHabilitado?: boolean;
   updatedAt: string;

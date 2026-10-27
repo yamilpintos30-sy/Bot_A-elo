@@ -2,7 +2,8 @@
  * Menú de opciones para WhatsApp, del tamaño que haga falta:
  *   - hasta 3 opciones: botones;
  *   - hasta 10: una lista (el botón dice "Choose an item", fijo de Chatwoot);
- *   - más de 10: varias listas seguidas de hasta 10 (el tope de WhatsApp),
+ *   - más de 10: varias listas seguidas de hasta 10 (el tope de WhatsApp), parejas
+ *     (12 opciones: 2 listas de 6),
  *     numeradas ("📋 Lista 2 de 4 de clientes"). Todas valen a la vez: el motor
  *     acumula los botones de toda la respuesta. Se mandan EN ORDEN: cada una
  *     espera la entrega de la anterior (WhatsApp mandaba la 2 antes que la 1).
@@ -44,8 +45,11 @@ export async function emitirMenu(emit: Emit, opciones: ButtonSpec[], textos: Tex
   if (opciones.length <= MAX_OPCIONES) {
     await emit({ kind: "buttons", text: textos.una(esLista), buttons: opciones, esperarEntrega: Boolean(cierre) });
   } else {
+    // Listas parejas: 12 opciones van en 2 de 6 (no en una de 10 y otra de 2).
+    const cantidad = Math.ceil(opciones.length / MAX_OPCIONES);
+    const porLista = Math.ceil(opciones.length / cantidad);
     const tandas: ButtonSpec[][] = [];
-    for (let i = 0; i < opciones.length; i += MAX_OPCIONES) tandas.push(opciones.slice(i, i + MAX_OPCIONES));
+    for (let i = 0; i < opciones.length; i += porLista) tandas.push(opciones.slice(i, i + porLista));
     for (const [i, tanda] of tandas.entries()) {
       const numero = numeroDeLista(i + 1, tandas.length, textos.deQue);
       await emit({
