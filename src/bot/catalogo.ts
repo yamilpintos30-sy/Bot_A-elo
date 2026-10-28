@@ -2,9 +2,8 @@
  * Reconoce cliente y planta en lo que escribe la gente: "shell planta 2",
  * "Total P1", "vista 1", "999991 000001".
  *
- * Los nombres y alias salen de las tablas del panel (no hay listas fijas en el
- * código): para que el bot entienda una forma nueva de escribir un cliente, se
- * agrega el alias en el panel.
+ * Los nombres salen de la API de SEA WHITE (operadoras y pozos) y los alias se
+ * arman solos a partir del nombre (storage/catalogo.ts, aliasDe).
  */
 import type { Cliente, Planta } from "../storage/catalogo.js";
 import { containsWords, normalizeText } from "../utils/text.js";

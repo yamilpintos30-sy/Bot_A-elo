@@ -42,18 +42,24 @@ export const SEAWHITE_ALLOWED_ENDPOINTS: readonly AllowedEndpoint[] = [
   { method: "GET", path: /^\/api\/VencimientosAnelo\/dominio\/\d+\/\d+\/pdf$/, writes: false, description: "PDF de dominio" },
   // "Manual_BOT_Endpoints_Vencimientos_Anelo_Con_JSON.pdf" (sólo lectura): en qué clientes
   // y subclientes tiene habilitación vigente un DNI (1 y 2) o un dominio (7 y 8).
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes\/\d{7,8}$/, writes: false, description: "clientes de un DNI (API 1)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes\/\d{7,8}\/\d{1,10}$/, writes: false, description: "subclientes de un DNI y cliente (API 2)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes-dominio\/[A-Z0-9]{6,8}$/, writes: false, description: "clientes de un dominio (API 7)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-dominio\/[A-Z0-9]{6,8}\/\d{1,10}$/, writes: false, description: "subclientes de un dominio y cliente (API 8)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes\/[12]\/\d{7,8}$/, writes: false, description: "clientes de un DNI (API 1)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes\/[12]\/\d{7,8}\/\d{1,10}$/, writes: false, description: "subclientes de un DNI y cliente (API 2)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes-dominio\/[12]\/[A-Z0-9]{6,8}$/, writes: false, description: "clientes de un dominio (API 7)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-dominio\/[12]\/[A-Z0-9]{6,8}\/\d{1,10}$/, writes: false, description: "subclientes de un dominio y cliente (API 8)" },
   // Logística (mismo manual, sólo lectura): listados grupales y búsqueda por nombre.
-  { method: "GET", path: "/api/VencimientosAnelo/clientes-habilitados", writes: false, description: "clientes con choferes vigentes (API 3)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-habilitados\/\d{1,10}$/, writes: false, description: "subclientes con choferes vigentes (API 4)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/choferes-habilitados\/\d{1,10}\/\d{1,10}$/, writes: false, description: "choferes vigentes de un cliente y subcliente (API 5)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/buscar-choferes\/[A-Za-z0-9%._~-]{3,150}$/, writes: false, description: "buscar choferes por nombre (API 6)" },
-  { method: "GET", path: "/api/VencimientosAnelo/clientes-habilitados-dominio", writes: false, description: "clientes con dominios vigentes (API 9)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-habilitados-dominio\/\d{1,10}$/, writes: false, description: "subclientes con dominios vigentes (API 10)" },
-  { method: "GET", path: /^\/api\/VencimientosAnelo\/dominios-habilitados\/\d{1,10}\/\d{1,10}$/, writes: false, description: "dominios vigentes de un cliente y subcliente (API 11)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes-habilitados\/[12]$/, writes: false, description: "clientes con choferes vigentes (API 3)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-habilitados\/[12]\/\d{1,10}$/, writes: false, description: "subclientes con choferes vigentes (API 4)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/choferes-habilitados\/[12]\/\d{1,10}\/\d{1,10}$/, writes: false, description: "choferes vigentes de un cliente y subcliente (API 5)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/buscar-choferes\/[12]\/[A-Za-z0-9%._~-]{3,150}$/, writes: false, description: "buscar choferes por nombre (API 6)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/clientes-habilitados-dominio\/[12]$/, writes: false, description: "clientes con dominios vigentes (API 9)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/subclientes-habilitados-dominio\/[12]\/\d{1,10}$/, writes: false, description: "subclientes con dominios vigentes (API 10)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/dominios-habilitados\/[12]\/\d{1,10}\/\d{1,10}$/, writes: false, description: "dominios vigentes de un cliente y subcliente (API 11)" },
+  // Desde el 28-oct-2026 ("Actualizacion_13_Endpoints_SeaWhite_Antes_Ahora.pdf") estas 13
+  // consultas llevan el servidor (1 o 2) en la ruta; las rutas viejas, sin él, quedan bloqueadas.
+  // Catálogo completo de operadoras (clientes) y pozos (subclientes), sólo lectura
+  // ("Instructivo_BOT_Operadoras_Pozos_SeaWhite.pdf", 27-oct-2026). Sin parámetros.
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/operadoras\/[12]$/, writes: false, description: "todas las operadoras (clientes)" },
+  { method: "GET", path: /^\/api\/VencimientosAnelo\/pozos\/[12]$/, writes: false, description: "todos los pozos (subclientes)" },
   // EXCEPCIÓN AUTORIZADA (2026-10-13): carga de vencimientos.
   { method: "POST", path: "/api/VencimientosAnelo/chofer", writes: true, description: "CARGA de vencimientos de chofer" },
   { method: "POST", path: "/api/VencimientosAnelo/dominio", writes: true, description: "CARGA de vencimientos de dominio" },

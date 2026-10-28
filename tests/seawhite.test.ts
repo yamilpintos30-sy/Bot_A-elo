@@ -8,6 +8,7 @@ import pino from "pino";
 import { AneloClient, MAX_REGISTROS_POR_LOTE } from "../src/integrations/seawhite/aneloClient.js";
 import { assertAllowedEndpoint } from "../src/integrations/seawhite/endpoints.js";
 import type { RegistroCarga } from "../src/integrations/seawhite/types.js";
+import { aliasDe, ApiCatalogo, CatalogoNoDisponibleError } from "../src/storage/catalogo.js";
 
 const logger = pino({ level: "silent" });
 const PDF = Buffer.from("%PDF-1.4\n%prueba\n");
@@ -250,10 +251,10 @@ describe("consultas", () => {
   it("API 1 / 7: clientes donde está habilitado un DNI o un dominio (JSON del manual)", async () => {
     const f = fakeFetch((call) => {
       const path = new URL(call.url).pathname;
-      if (path === "/api/VencimientosAnelo/clientes/38303667") {
+      if (path === "/api/VencimientosAnelo/clientes/1/38303667") {
         return Response.json({ ok: true, dni: "38303667", cantidad: 1, clientes: [{ cliente: "000015", razon_social: "ALFA TRANSPORTES S.A." }] });
       }
-      if (path === "/api/VencimientosAnelo/clientes-dominio/AAA111") {
+      if (path === "/api/VencimientosAnelo/clientes-dominio/1/AAA111") {
         return Response.json({ ok: true, dominio: "AAA111", cantidad: 0, clientes: [] });
       }
       return new Response("no", { status: 500 });
@@ -267,8 +268,8 @@ describe("consultas", () => {
     const f = fakeFetch((call) => {
       const path = new URL(call.url).pathname;
       const subclientes = [{ subcliente: "000003", razon_social: "DEPOSITO CENTRAL" }];
-      if (path === "/api/VencimientosAnelo/subclientes/38303667/000015") return Response.json({ ok: true, dni: "38303667", cliente: "000015", cantidad: 1, subclientes });
-      if (path === "/api/VencimientosAnelo/subclientes-dominio/AAA111/000015") return Response.json({ ok: true, dominio: "AAA111", cliente: "000015", cantidad: 1, subclientes });
+      if (path === "/api/VencimientosAnelo/subclientes/1/38303667/000015") return Response.json({ ok: true, dni: "38303667", cliente: "000015", cantidad: 1, subclientes });
+      if (path === "/api/VencimientosAnelo/subclientes-dominio/1/AAA111/000015") return Response.json({ ok: true, dominio: "AAA111", cliente: "000015", cantidad: 1, subclientes });
       return new Response("no", { status: 500 });
     });
     const c = client(f.fn);
@@ -282,12 +283,12 @@ describe("consultas", () => {
   });
 
   it("API 1/2/7/8: sólo GET, y con DNI o patente válidos en la ruta", () => {
-    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/38303667")).toEqual({ writes: false });
-    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/subclientes/38303667/000015")).toEqual({ writes: false });
-    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes-dominio/AA123BB")).toEqual({ writes: false });
-    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/subclientes-dominio/AA123BB/0001")).toEqual({ writes: false });
-    expect(() => assertAllowedEndpoint("POST", "/api/VencimientosAnelo/clientes/38303667")).toThrow(/BLOQUEADO/);
-    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/../../x")).toThrow(/BLOQUEADO/);
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/1/38303667")).toEqual({ writes: false });
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/subclientes/1/38303667/000015")).toEqual({ writes: false });
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes-dominio/1/AA123BB")).toEqual({ writes: false });
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/subclientes-dominio/1/AA123BB/0001")).toEqual({ writes: false });
+    expect(() => assertAllowedEndpoint("POST", "/api/VencimientosAnelo/clientes/1/38303667")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/1/../../x")).toThrow(/BLOQUEADO/);
   });
 
   it("logística: APIs 3 a 6 y 9 a 11 con los JSON del manual", async () => {
@@ -296,17 +297,17 @@ describe("consultas", () => {
       const clientes = [{ cliente: "000015", razon_social: "ALFA TRANSPORTES S.A." }];
       const subclientes = [{ subcliente: "000003", razon_social: "DEPOSITO CENTRAL" }];
       switch (path) {
-        case "/api/VencimientosAnelo/clientes-habilitados":
-        case "/api/VencimientosAnelo/clientes-habilitados-dominio":
+        case "/api/VencimientosAnelo/clientes-habilitados/1":
+        case "/api/VencimientosAnelo/clientes-habilitados-dominio/1":
           return Response.json({ ok: true, cantidad: 1, clientes });
-        case "/api/VencimientosAnelo/subclientes-habilitados/000015":
-        case "/api/VencimientosAnelo/subclientes-habilitados-dominio/000015":
+        case "/api/VencimientosAnelo/subclientes-habilitados/1/000015":
+        case "/api/VencimientosAnelo/subclientes-habilitados-dominio/1/000015":
           return Response.json({ ok: true, cliente: "000015", cantidad: 1, subclientes });
-        case "/api/VencimientosAnelo/choferes-habilitados/000015/000003":
+        case "/api/VencimientosAnelo/choferes-habilitados/1/000015/000003":
           return Response.json({ ok: true, cantidad: 1, choferes: [{ chofer: "28345678", razon_social: "GOMEZ JUAN", vencimiento: "15-12-2026" }] });
-        case "/api/VencimientosAnelo/dominios-habilitados/000015/000003":
+        case "/api/VencimientosAnelo/dominios-habilitados/1/000015/000003":
           return Response.json({ ok: true, cantidad: 2, dominios: [{ dominio: "AA123BB", tipo: "Camion", vencimiento: "15-12-2026" }, { dominio: "AC789EF", tipo: "Acoplado", vencimiento: "30-03-2027" }] });
-        case "/api/VencimientosAnelo/buscar-choferes/G%C3%93MEZ%20JUAN":
+        case "/api/VencimientosAnelo/buscar-choferes/1/G%C3%93MEZ%20JUAN":
           return Response.json({ ok: true, busqueda: "GÓMEZ JUAN", cantidad: 1, choferes: [{ chofer: "28345678", razon_social: "GOMEZ JUAN" }] });
         default:
           return new Response(`no: ${path}`, { status: 500 });
@@ -329,21 +330,38 @@ describe("consultas", () => {
     expect(await c.buscarChoferes("go")).toEqual([]); // menos de 3 letras: ni sale a la red
   });
 
+  it("las 13 consultas llevan el servidor en la ruta: las rutas viejas quedan bloqueadas", () => {
+    for (const vieja of [
+      "/api/VencimientosAnelo/clientes/38303667",
+      "/api/VencimientosAnelo/subclientes/38303667/000015",
+      "/api/VencimientosAnelo/clientes-habilitados",
+      "/api/VencimientosAnelo/buscar-choferes/CLAUDIO",
+      "/api/VencimientosAnelo/dominios-habilitados/000015/000003",
+      "/api/VencimientosAnelo/operadoras",
+      "/api/VencimientosAnelo/pozos",
+    ]) {
+      expect(() => assertAllowedEndpoint("GET", vieja)).toThrow(/BLOQUEADO/);
+    }
+    // Servidor 1 o 2; otro no.
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/2/38303667")).toEqual({ writes: false });
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/clientes/3/38303667")).toThrow(/BLOQUEADO/);
+  });
+
   it("logística: sólo GET en la lista blanca, con códigos numéricos", () => {
     for (const p of [
-      "/api/VencimientosAnelo/clientes-habilitados",
-      "/api/VencimientosAnelo/subclientes-habilitados/000015",
-      "/api/VencimientosAnelo/choferes-habilitados/000015/000003",
-      "/api/VencimientosAnelo/buscar-choferes/GOMEZ%20JUAN",
-      "/api/VencimientosAnelo/clientes-habilitados-dominio",
-      "/api/VencimientosAnelo/subclientes-habilitados-dominio/000015",
-      "/api/VencimientosAnelo/dominios-habilitados/000015/000003",
+      "/api/VencimientosAnelo/clientes-habilitados/1",
+      "/api/VencimientosAnelo/subclientes-habilitados/1/000015",
+      "/api/VencimientosAnelo/choferes-habilitados/1/000015/000003",
+      "/api/VencimientosAnelo/buscar-choferes/1/GOMEZ%20JUAN",
+      "/api/VencimientosAnelo/clientes-habilitados-dominio/1",
+      "/api/VencimientosAnelo/subclientes-habilitados-dominio/1/000015",
+      "/api/VencimientosAnelo/dominios-habilitados/1/000015/000003",
     ]) {
       expect(assertAllowedEndpoint("GET", p)).toEqual({ writes: false });
       expect(() => assertAllowedEndpoint("POST", p)).toThrow(/BLOQUEADO/);
     }
-    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/choferes-habilitados/../x")).toThrow(/BLOQUEADO/);
-    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/buscar-choferes/a/b")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/choferes-habilitados/1/../x")).toThrow(/BLOQUEADO/);
+    expect(() => assertAllowedEndpoint("GET", "/api/VencimientosAnelo/buscar-choferes/1/a/b")).toThrow(/BLOQUEADO/);
   });
 
   it("las consultas funcionan aunque la carga esté deshabilitada", async () => {
@@ -351,5 +369,51 @@ describe("consultas", () => {
     const pdf = await client(f.fn, { cargaHabilitada: false }).descargarPdf("dominio", 5);
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(new URL(f.calls.at(-1)!.url).pathname).toBe("/api/VencimientosAnelo/dominio/1/5/pdf");
+  });
+});
+
+describe("operadoras y pozos (catálogo de la carga, desde la API)", () => {
+  const api = () =>
+    fakeFetch((call) => {
+      const path = new URL(call.url).pathname;
+      if (path === "/api/VencimientosAnelo/operadoras/1")
+        return Response.json({ ok: true, cantidad: 2, operadoras: [{ codigo: "000002", razon_social: "TOTAL AUSTRAL S.A." }, { codigo: "000001", razon_social: "OPERADORA A" }] });
+      if (path === "/api/VencimientosAnelo/pozos/1")
+        return Response.json({ ok: true, cantidad: 2, pozos: [{ codigo: "000101", razon_social: "POZO A" }, { codigo: "000102", razon_social: "POZO B" }] });
+      return new Response("no", { status: 500 });
+    });
+
+  it("GET operadoras y pozos con los JSON del instructivo (códigos como texto)", async () => {
+    const f = api();
+    const c = client(f.fn, { cargaHabilitada: false });
+    expect(await c.operadoras()).toEqual([{ codigo: "000002", nombre: "TOTAL AUSTRAL S.A." }, { codigo: "000001", nombre: "OPERADORA A" }]);
+    expect(await c.pozos()).toEqual([{ codigo: "000101", nombre: "POZO A" }, { codigo: "000102", nombre: "POZO B" }]);
+    // Sin parámetros: ni servidor ni cuerpo.
+    const gets = f.calls.filter((x) => x.method === "GET");
+    expect(gets.map((x) => x.url)).toEqual(["https://api.test/api/VencimientosAnelo/operadoras/1", "https://api.test/api/VencimientosAnelo/pozos/1"]);
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/operadoras/1").writes).toBe(false);
+    expect(assertAllowedEndpoint("GET", "/api/VencimientosAnelo/pozos/1").writes).toBe(false);
+  });
+
+  it("cada operadora lleva todos los pozos (listas independientes), por orden alfabético", async () => {
+    const cat = new ApiCatalogo(client(api().fn, { cargaHabilitada: false }), logger);
+    const lista = await cat.listar();
+    expect(lista.map((o) => o.nombre)).toEqual(["OPERADORA A", "TOTAL AUSTRAL S.A."]);
+    expect(lista.every((o) => o.plantas.map((p) => p.codigo).join() === "000101,000102")).toBe(true);
+    expect(lista[1]!.alias).toEqual(["total austral", "total"]);
+    expect(aliasDe("A.C.A")).toEqual(["a c a"]);
+  });
+
+  it("si la API falla usa la última lista buena; sin lista anterior, error claro", async () => {
+    let caida = false;
+    const fuente = {
+      operadoras: async () => (caida ? Promise.reject(new Error("HTTP 500")) : [{ codigo: "000001", nombre: "OPERADORA A" }]),
+      pozos: async () => [{ codigo: "000101", nombre: "POZO A" }],
+    };
+    const cat = new ApiCatalogo(fuente, logger, 0);
+    expect(await cat.listar()).toHaveLength(1);
+    caida = true;
+    expect(await cat.listar()).toHaveLength(1);
+    await expect(new ApiCatalogo(fuente, logger, 0).listar()).rejects.toBeInstanceOf(CatalogoNoDisponibleError);
   });
 });

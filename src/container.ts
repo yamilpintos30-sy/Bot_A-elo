@@ -12,7 +12,7 @@ import { ProcesadorCarnets } from "./extraction/procesarCarnets.js";
 import { VerificadorComprobantes } from "./extraction/verificadorComprobantes.js";
 import { AneloClient } from "./integrations/seawhite/aneloClient.js";
 import { SupabaseListaTelefonos } from "./storage/cargadores.js";
-import { SupabaseCatalogo } from "./storage/catalogo.js";
+import { ApiCatalogo } from "./storage/catalogo.js";
 import { SupabaseFallas } from "./storage/fallas.js";
 import { SupabaseRegistro } from "./storage/registro.js";
 import { SupabaseMessageLog, SupabaseSessions } from "./storage/sessions.js";
@@ -60,7 +60,8 @@ export function buildContainer(config: AppConfig = loadConfig()): Container {
   const deps: BotDeps = {
     botName: config.BOT_NAME,
     timezone: config.TIMEZONE,
-    catalogo: new SupabaseCatalogo(supabase),
+    // Operadoras y pozos: siempre de la API de SEA WHITE (no de la tabla del panel).
+    catalogo: new ApiCatalogo(seawhite, logger),
     cargadores: new SupabaseListaTelefonos(supabase, "anelo_cargadores"),
     consultores: new SupabaseListaTelefonos(supabase, "anelo_consultores"),
     logistica: new SupabaseListaTelefonos(supabase, "anelo_logistica"),

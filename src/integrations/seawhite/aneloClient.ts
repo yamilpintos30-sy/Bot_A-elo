@@ -58,6 +58,14 @@ export class AneloClient {
     this.tokens = new SeaWhiteTokenManager({ ...opts, fetchImpl: this.doFetch });
   }
 
+  /**
+   * Servidor en la ruta de las consultas GET ("Actualizacion_13_Endpoints", 28-oct-2026):
+   * `/clientes/1/38303667`. Sale de SEALINK_SERVIDOR, como recomienda SEA WHITE.
+   */
+  private get sv(): string {
+    return encodeURIComponent(this.opts.servidor);
+  }
+
   // --- Consultas (sólo lectura) ----------------------------------------------
 
   async consultar(tipo: TipoRegistro, cliente: string, subcliente: string, identificador: string): Promise<Consulta> {
@@ -91,7 +99,7 @@ export class AneloClient {
   /** Clientes donde el DNI (API 1) o el dominio (API 7) tiene habilitación vigente. */
   async clientesHabilitados(tipo: TipoRegistro, identificador: string): Promise<CodigoNombre[]> {
     const id = encodeURIComponent(identificador);
-    const path = tipo === "chofer" ? `/api/VencimientosAnelo/clientes/${id}` : `/api/VencimientosAnelo/clientes-dominio/${id}`;
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/clientes/${this.sv}/${id}` : `/api/VencimientosAnelo/clientes-dominio/${this.sv}/${id}`;
     return this.listaCodigos(path, "clientes", "cliente");
   }
 
@@ -99,7 +107,7 @@ export class AneloClient {
   async subclientesHabilitados(tipo: TipoRegistro, identificador: string, cliente: string): Promise<CodigoNombre[]> {
     const id = encodeURIComponent(identificador);
     const cli = encodeURIComponent(cliente);
-    const path = tipo === "chofer" ? `/api/VencimientosAnelo/subclientes/${id}/${cli}` : `/api/VencimientosAnelo/subclientes-dominio/${id}/${cli}`;
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/subclientes/${this.sv}/${id}/${cli}` : `/api/VencimientosAnelo/subclientes-dominio/${this.sv}/${id}/${cli}`;
     return this.listaCodigos(path, "subclientes", "subcliente");
   }
 
@@ -107,18 +115,18 @@ export class AneloClient {
   async buscarChoferes(texto: string): Promise<CodigoNombre[]> {
     const limpio = texto.normalize("NFC").replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
     if (limpio.length < 3) return [];
-    return this.listaCodigos(`/api/VencimientosAnelo/buscar-choferes/${encodeURIComponent(limpio)}`, "choferes", "chofer");
+    return this.listaCodigos(`/api/VencimientosAnelo/buscar-choferes/${this.sv}/${encodeURIComponent(limpio)}`, "choferes", "chofer");
   }
 
   /** Clientes con algún chofer (API 3) o dominio (API 9) vigente. */
   async clientesConVigentes(tipo: TipoRegistro): Promise<CodigoNombre[]> {
-    return this.listaCodigos(tipo === "chofer" ? "/api/VencimientosAnelo/clientes-habilitados" : "/api/VencimientosAnelo/clientes-habilitados-dominio", "clientes", "cliente");
+    return this.listaCodigos(tipo === "chofer" ? `/api/VencimientosAnelo/clientes-habilitados/${this.sv}` : `/api/VencimientosAnelo/clientes-habilitados-dominio/${this.sv}`, "clientes", "cliente");
   }
 
   /** Subclientes de un cliente con algún chofer (API 4) o dominio (API 10) vigente. */
   async subclientesConVigentes(tipo: TipoRegistro, cliente: string): Promise<CodigoNombre[]> {
     const cli = encodeURIComponent(cliente);
-    const path = tipo === "chofer" ? `/api/VencimientosAnelo/subclientes-habilitados/${cli}` : `/api/VencimientosAnelo/subclientes-habilitados-dominio/${cli}`;
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/subclientes-habilitados/${this.sv}/${cli}` : `/api/VencimientosAnelo/subclientes-habilitados-dominio/${this.sv}/${cli}`;
     return this.listaCodigos(path, "subclientes", "subcliente");
   }
 
@@ -126,7 +134,7 @@ export class AneloClient {
   async listadoVigentes(tipo: TipoRegistro, cliente: string, subcliente: string): Promise<FilaListado[]> {
     const cli = encodeURIComponent(cliente);
     const sub = encodeURIComponent(subcliente);
-    const path = tipo === "chofer" ? `/api/VencimientosAnelo/choferes-habilitados/${cli}/${sub}` : `/api/VencimientosAnelo/dominios-habilitados/${cli}/${sub}`;
+    const path = tipo === "chofer" ? `/api/VencimientosAnelo/choferes-habilitados/${this.sv}/${cli}/${sub}` : `/api/VencimientosAnelo/dominios-habilitados/${this.sv}/${cli}/${sub}`;
     const items = await this.listaCruda(path, tipo === "chofer" ? "choferes" : "dominios");
     return items
       .map((i) => ({
@@ -136,6 +144,16 @@ export class AneloClient {
         vencimiento: String(i.vencimiento ?? "").trim(),
       }))
       .filter((f) => f.identificador !== "");
+  }
+
+  /** Todas las operadoras (clientes) de SEA WHITE, ordenadas por razón social. */
+  async operadoras(): Promise<CodigoNombre[]> {
+    return this.listaCodigos(`/api/VencimientosAnelo/operadoras/${this.sv}`, "operadoras", "codigo");
+  }
+
+  /** Todos los pozos (subclientes). Lista independiente: no depende de la operadora. */
+  async pozos(): Promise<CodigoNombre[]> {
+    return this.listaCodigos(`/api/VencimientosAnelo/pozos/${this.sv}`, "pozos", "codigo");
   }
 
   /**

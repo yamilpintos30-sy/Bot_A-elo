@@ -65,7 +65,7 @@ La salida queda en `salida-extraccion/` (está en .gitignore porque tiene datos 
 
 **Cargadores** (tabla `anelo_cargadores`):
 1. Cualquier mensaje abre el menú **[👤 Choferes] [🚛 Dominios]**.
-2. Piden cliente y subcliente, que se cotejan contra la tabla de clientes: "✅ encontrados, mandá el PDF".
+2. Eligen operadora y pozo de menús que salen de la API de SEA WHITE (`GET /api/VencimientosAnelo/operadoras` y `/pozos`; las listas son independientes). La tabla `anelo_clientes` del panel ya no se lee.
 3. Mientras se procesa el PDF, el bot avisa el progreso: recibido, separando y verificando. Si tarda, manda "sigue en proceso".
 4. **Filtro de tipo:** si eligió choferes y el PDF trae vehículos (o al revés), avisa y no carga nada. Ofrece cargarlo como el otro tipo. Si el PDF viene mezclado, carga solo el tipo elegido y lista el resto.
 5. Resumen, **[Confirmar carga] [Cancelar]**, carga en SEA WHITE, resultado y vuelve al menú.

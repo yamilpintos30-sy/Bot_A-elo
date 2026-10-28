@@ -94,6 +94,10 @@ export const CARGA = {
   elegirCliente: (hola: boolean, lista = false) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *operadora* vas a cargar?${lista ? `\n${aclaracionLista}` : ""}`,
   /** Muchas operadoras: van en varias listas seguidas, por orden alfabético. */
   elegirClienteVarias: (hola: boolean, listas: number) => `${hola ? "¡Hola! 👋\n" : ""}¿Qué *operadora* vas a cargar?\n${variasListas(listas)}`,
+  /** SEA WHITE no devolvió operadoras y pozos (y no hay una lista anterior). */
+  catalogoNoDisponible: "⚠️ No pude traer las operadoras y pozos de SEA WHITE en este momento. Probá de nuevo en unos minutos.",
+  sinOperadoras: "SEA WHITE no tiene operadoras cargadas todavía, así que no se puede cargar documentación.",
+  sinPozos: "SEA WHITE no tiene pozos cargados todavía, así que no se puede cargar documentación.",
   /** Paso 2: pozo (subcliente) de la operadora elegida. */
   elegirOperadora: (operadora: string) => `*${operadora}*\n¿Qué *pozo*?`,
   /** Después de elegir la operadora: se confirma antes de pasar al pozo. */

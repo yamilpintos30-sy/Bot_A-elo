@@ -1,15 +1,16 @@
 /**
  * Flujo de CARGA (números de la lista de cargadores).
  *
- *   ¿Qué operadora?    -> menú con las operadoras de la tabla (varias listas si son más de 10)
- *   ¿Qué pozo?         -> menú con los pozos (subclientes) de esa operadora
+ *   ¿Qué operadora?    -> menú con las operadoras de SEA WHITE (varias listas si son más de 10)
+ *   ¿Qué pozo?         -> menú con los pozos de SEA WHITE (lista independiente de la operadora)
  *   ¿Qué documentación? -> [Choferes] [Dominios]
  *   -> mandar el PDF -> procesar, avisando el progreso (separar carnets, verificar)
  *   -> FILTRO DE TIPO: si eligió choferes y el PDF trae vehículos (o al revés), avisa
  *   -> resumen + [Confirmar carga] [Cancelar]
  *   -> guardar en SEA WHITE -> resultado -> otra carga (misma operadora u otra)
  *
- * Nada se escribe: operadora y pozo se eligen de menús.
+ * Nada se escribe: operadora y pozo se eligen de menús. Las dos listas salen de la
+ * API de SEA WHITE (GET operadoras / pozos), no de una tabla propia.
  *
  * NOMBRES (25-oct-2026): lo que la API de SEA WHITE y el código llaman CLIENTE,
  * en los mensajes es la OPERADORA; lo que llaman SUBCLIENTE es el POZO.
@@ -18,13 +19,13 @@ import { nombreYApellido } from "../domain/validators.js";
 import { FormatoNoSoportadoError, unirEnPdf } from "../extraction/aPdf.js";
 import type { RegistroCarga, ResumenCarga, TipoRegistro } from "../integrations/seawhite/types.js";
 import type { CarnetListo } from "../extraction/review.js";
-import type { Cliente } from "../storage/catalogo.js";
+import { CatalogoNoDisponibleError, type Cliente } from "../storage/catalogo.js";
 import type { CarnetRegistrado } from "../storage/registro.js";
 import { buttonTitle, normalizeText } from "../utils/text.js";
 import { buscar, etiqueta, nombreCorto } from "./catalogo.js";
 import { BOTON_FIN, BOTON_MENU } from "./comandos.js";
 import type { BotDeps, Emit, LotePendiente } from "./deps.js";
-import { emitirMenu, MAX_OPCIONES, titulos } from "./menuListas.js";
+import { aclaracionLista, emitirMenu, titulos, variasListas } from "./menuListas.js";
 import { avisoTipoMezclado, CARGA, ofrecerOtroTipo, resultadoCarga, resumenParaConfirmar, sinCarnetsAptos, TIPO } from "./texts.js";
 import type { ButtonSpec, CargadorState, IncomingAttachment, IncomingMessage, Session } from "./types.js";
 
@@ -83,7 +84,8 @@ export class CargadorFlow {
 
     if (st.etapa === "esperando_confirmacion") return this.enConfirmacion(session, st, payload, emit, msg);
 
-    const clientes = await this.deps.catalogo.listar();
+    const clientes = await this.catalogo(emit);
+    if (!clientes) return;
 
     // [🏠 Menú principal] / [🔄 Otro cliente]: de cero, desde el cliente.
     if (payload === "menu" || payload === "otrocliente") {
@@ -148,19 +150,41 @@ export class CargadorFlow {
     return this.procesar(session, st, destino, emit);
   }
 
+  /**
+   * Operadoras y pozos de SEA WHITE. Si la API no responde (y no hay una lista
+   * anterior), avisa y devuelve undefined: no se puede seguir con la carga.
+   */
+  private async catalogo(emit: Emit): Promise<Cliente[] | undefined> {
+    try {
+      return await this.deps.catalogo.listar();
+    } catch (err) {
+      if (!(err instanceof CatalogoNoDisponibleError)) throw err;
+      this.deps.logger.error({ err: err.message }, "Sin operadoras/pozos de SEA WHITE");
+      await emit({ kind: "text", text: CARGA.catalogoNoDisponible });
+      return undefined;
+    }
+  }
+
   /** Menú de clientes (por orden alfabético): botones, una lista o varias (menuListas.ts). */
   private async menuClientes(clientes: Cliente[], emit: Emit, hola: boolean): Promise<void> {
     const opciones = titulos(clientes, (c) => nombreCorto(c.nombre), (c) => c.nombre).map((b, i) => ({ ...b, payload: `cli:${clientes[i]!.codigo}` }));
-    if (!opciones.length) return emit({ kind: "text", text: "No hay operadoras cargadas. Cargalas desde el panel (Operadoras y pozos)." });
+    if (!opciones.length) return emit({ kind: "text", text: CARGA.sinOperadoras });
     return emitirMenu(emit, opciones, { una: (lista) => CARGA.elegirCliente(hola, lista), varias: (listas) => CARGA.elegirClienteVarias(hola, listas), deQue: "operadoras" });
   }
 
-  /** Menú de operadoras (subclientes) del cliente: aunque haya una sola, se elige del menú. */
+  /** Menú de pozos (todos los de SEA WHITE): aunque haya uno solo, se elige del menú. */
   private menuOperadoras(cliente: Cliente, emit: Emit): Promise<void> {
-    const plantas = cliente.plantas.slice(0, MAX_OPCIONES - 1);
-    if (!plantas.length) return emit({ kind: "buttons", text: `*${cliente.nombre}* no tiene pozos cargados.`, buttons: [BOTON_MENU, BOTON_FIN] });
-    const botones = titulos(plantas, (p) => p.nombre).map((b, i) => ({ ...b, payload: `pla:${plantas[i]!.codigo}` }));
-    return emit({ kind: "buttons", text: CARGA.elegirOperadora(cliente.nombre), buttons: botones });
+    const plantas = cliente.plantas;
+    if (!plantas.length) return emit({ kind: "buttons", text: CARGA.sinPozos, buttons: [BOTON_MENU, BOTON_FIN] });
+    const opciones = titulos(plantas, (p) => p.nombre).map((b, i) => ({ ...b, payload: `pla:${plantas[i]!.codigo}` }));
+    const pregunta = CARGA.elegirOperadora(cliente.nombre);
+    return emitirMenu(emit, opciones, {
+      una: (lista) => (lista ? `${pregunta}
+${aclaracionLista}` : pregunta),
+      varias: (listas) => `${pregunta}
+${variasListas(listas)}`,
+      deQue: "pozos",
+    });
   }
 
   // --- Procesamiento ---------------------------------------------------------------
@@ -277,7 +301,8 @@ export class CargadorFlow {
       if (payload === "menu" || payload === "cancelar") {
         this.deps.lotes.borrar(st.loteId);
         session.cargador = { etapa: "esperando_datos" };
-        return this.menuClientes(await this.deps.catalogo.listar(), emit, false);
+        const clientes = await this.catalogo(emit);
+        return clientes ? this.menuClientes(clientes, emit, false) : undefined;
       }
       return this.ofrecerOtro(lote, emit);
     }
@@ -402,7 +427,9 @@ export class CargadorFlow {
   private async conMenu(emit: Emit, texto: string, clienteCodigo?: string): Promise<void> {
     // [Choferes (cliente)] [Dominios (cliente)] [🔄 Cambiar cliente]: tres botones (con más,
     // WhatsApp lo muestra como lista). Sin "Eso es todo": la sesión se corta sola a la hora.
-    const cliente = clienteCodigo ? (await this.deps.catalogo.listar()).find((c) => c.codigo === clienteCodigo) : undefined;
+    // Si SEA WHITE no responde, el menú sale igual (sin el nombre de la operadora).
+    const clientes = clienteCodigo ? await this.deps.catalogo.listar().catch(() => [] as Cliente[]) : [];
+    const cliente = clientes.find((c) => c.codigo === clienteCodigo);
     // El cliente entre paréntesis sólo si entra entero en el botón (20 caracteres);
     // si no ("Choferes (Halliburt…"), los botones van sin él: igual se nombra en el texto.
     const conCliente = (tipo: string) => (cliente ? `${tipo} (${nombreParaBoton(cliente)})` : tipo);

@@ -17,7 +17,7 @@ import type { Consulta, RegistroCarga, ResumenCarga, TipoRegistro } from "../src
 import { MemoryListaTelefonos } from "../src/storage/cargadores.js";
 import { MemoryFallas } from "../src/storage/fallas.js";
 import type { ResultadoVerificacion } from "../src/extraction/verificadorComprobantes.js";
-import { MemoryCatalogo, type Cliente } from "../src/storage/catalogo.js";
+import { CatalogoNoDisponibleError, MemoryCatalogo, type Cliente } from "../src/storage/catalogo.js";
 import { MemoryRegistro } from "../src/storage/registro.js";
 import { MemorySessions, NoopMessageLog } from "../src/storage/sessions.js";
 
@@ -484,6 +484,27 @@ describe("cargador", () => {
     await say(CARGADOR, "Cliente 02");
     outs = await say(CARGADOR, "✅ Sí");
     expect(texts(outs)).toBe("*CLIENTE 02*\n¿Qué *pozo*?");
+  });
+
+  it("muchos pozos (lista de SEA WHITE): van en varias listas parejas", async () => {
+    const { say, deps } = setup();
+    const pozos = Array.from({ length: 14 }, (_, i) => ({ codigo: String(101 + i).padStart(6, "0"), nombre: `POZO ${String(i + 1).padStart(2, "0")}`, alias: [] }));
+    deps.catalogo = new MemoryCatalogo([{ codigo: "000001", nombre: "TOTAL AUSTRAL", alias: ["total austral", "total"], plantas: pozos }]);
+    await say(CARGADOR, "hola");
+    await say(CARGADOR, "TOTAL AUSTRAL");
+    let outs = await say(CARGADOR, "✅ Sí");
+    const listas = outs.filter((o) => o.kind === "buttons") as Array<Extract<Outbound, { kind: "buttons" }>>;
+    expect(listas.map((l) => l.buttons.length)).toEqual([7, 7]);
+    expect(texts(outs)).toMatch(/^\*TOTAL AUSTRAL\*\n¿Qué \*pozo\*\?\n👇 Están en 2 listas[\s\S]*Lista 2 de 2 de pozos$/);
+    outs = await say(CARGADOR, "POZO 12");
+    expect(buttons(outs)).toEqual(["👤 Choferes", "🚛 Dominios", "Eso es todo, gracias"]);
+  });
+
+  it("si SEA WHITE no devuelve operadoras y pozos, avisa (no se queda callado)", async () => {
+    const { say, deps } = setup();
+    deps.catalogo = { listar: async () => Promise.reject(new CatalogoNoDisponibleError("HTTP 500")) };
+    const outs = await say(CARGADOR, "hola");
+    expect(texts(outs)).toMatch(/No pude traer las operadoras y pozos de SEA WHITE/);
   });
 
   it("menú viejo con [➡️ Ver más] (sesión guardada): muestra las listas", async () => {
