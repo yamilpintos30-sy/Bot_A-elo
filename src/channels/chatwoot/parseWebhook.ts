@@ -12,7 +12,7 @@ import type { ChatwootAttachment, ChatwootWebhookPayload } from "./types.js";
 
 export type ChatwootEvent =
   | { kind: "message"; message: IncomingMessage }
-  | { kind: "outgoing"; conversationId: string; messageId?: string; text: string; senderType?: string }
+  | { kind: "outgoing"; conversationId: string; messageId?: string; text: string; senderType?: string; contentType?: string }
   | { kind: "status_changed"; conversationId: string; status: string }
   | { kind: "ignore"; reason: string };
 
@@ -73,6 +73,7 @@ export function parseChatwootWebhook(payload: ChatwootWebhookPayload): ChatwootE
       messageId: payload.id !== undefined ? String(payload.id) : undefined,
       text,
       senderType: payload.sender?.type,
+      contentType: payload.content_type,
     };
   }
   if (dir !== "incoming") return { kind: "ignore", reason: "message_type desconocido" };

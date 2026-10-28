@@ -17,12 +17,12 @@ let server: Server | undefined;
 
 afterEach(() => server?.close());
 
-async function start() {
+async function start(opts: { gracia?: number } = {}) {
   const engine = { handle: vi.fn(async () => undefined), markHandedOff: vi.fn(async () => undefined), reset: vi.fn(async () => undefined) };
   const echo = new EchoGuard();
   const app = express();
   app.use(express.json());
-  app.use(createWebhookRouter({ secret: SECRET, inboxId: "146313", engine: engine as unknown as BotEngine, echo, logger, debounceMs: 0 }));
+  app.use(createWebhookRouter({ secret: SECRET, inboxId: "146313", engine: engine as unknown as BotEngine, echo, logger, debounceMs: 0, graciaArranqueMs: opts.gracia ?? 0 }));
   server = app.listen(0);
   const port = (server.address() as AddressInfo).port;
   const post = (body: unknown, token = SECRET) =>
@@ -85,6 +85,20 @@ describe("webhook", () => {
     await post(saliente("Hola, te atiendo yo", 100)); // persona (mismo usuario del token)
     await settle();
     expect(engine.markHandedOff).toHaveBeenCalledWith("77");
+  });
+
+  it("un saliente con botones o lista no calla al bot (lo manda un bot, aunque sea otra instancia)", async () => {
+    const { post, engine, settle } = await start();
+    await post({ event: "message_created", id: 5, message_type: "outgoing", content: "¿Qué operadora vas a cargar?", content_type: "input_select", account: { id: 182533 }, conversation: { id: 77, inbox_id: 146313 }, sender: { id: 5, type: "user" } });
+    await settle();
+    expect(engine.markHandedOff).not.toHaveBeenCalled();
+  });
+
+  it("recién arrancado (deploy o reinicio), un saliente desconocido no calla al bot", async () => {
+    const { post, engine, settle } = await start({ gracia: 60_000 });
+    await post({ event: "message_created", id: 6, message_type: "outgoing", content: "📋 Lista 2 de 2 de operadoras", account: { id: 182533 }, conversation: { id: 77, inbox_id: 146313 }, sender: { id: 5, type: "user" } });
+    await settle();
+    expect(engine.markHandedOff).not.toHaveBeenCalled();
   });
 
   it("una conversación resuelta se resetea", async () => {

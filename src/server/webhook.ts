@@ -29,6 +29,13 @@ export interface WebhookOptions {
   debounceMs: number;
   /** Estados de conversación en los que el bot responde. */
   activeStatuses?: string[];
+  /**
+   * Después de arrancar, durante este tiempo un saliente que no se reconoce NO
+   * calla al bot: en un deploy (o un reinicio por cambiar una variable en Render)
+   * la versión vieja sigue contestando un rato, y sus mensajes le llegan a ésta,
+   * que no los tiene registrados (pasó el 22 y el 28-oct en el chat 211).
+   */
+  graciaArranqueMs?: number;
 }
 
 class RecentIds {
@@ -43,6 +50,8 @@ class RecentIds {
 
 export function createWebhookRouter(opts: WebhookOptions): Router {
   const { engine, echo, logger } = opts;
+  const arranque = Date.now();
+  const gracia = opts.graciaArranqueMs ?? 3 * 60_000;
   const router = Router();
   const recent = new RecentIds();
   const activos = new Set((opts.activeStatuses ?? ["open", "pending"]).map((s) => s.toLowerCase()));
@@ -87,6 +96,12 @@ export function createWebhookRouter(opts: WebhookOptions): Router {
         return;
       case "outgoing":
         if (event.senderType === "agent_bot" || echo.isEcho(event.conversationId, event.messageId, event.text)) return;
+        // Botones o lista: lo manda un bot (desde Chatwoot una persona no puede), aunque
+        // sea la otra instancia. Y recién arrancado, puede ser la instancia vieja.
+        if (event.contentType === "input_select" || Date.now() - arranque < gracia) {
+          logger.info({ conversationId: event.conversationId, contentType: event.contentType }, "Saliente no registrado (otra instancia del bot): no se calla");
+          return;
+        }
         logger.info({ conversationId: event.conversationId }, "Respondió una persona: el bot se calla en este chat");
         debouncer.clear(event.conversationId);
         enqueue(event.conversationId, () => engine.markHandedOff(event.conversationId));
